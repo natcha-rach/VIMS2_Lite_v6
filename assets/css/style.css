@@ -1,0 +1,261 @@
+/* ==========================================================
+   Design tokens
+   คอนเซ็ปต์: "ป้ายราคาเสื้อผ้ามือสอง" — สีดินเผา/หนัง + กระดาษป้ายราคา
+   ========================================================== */
+:root {
+  --color-bg: #F6F3EC;          /* พื้นหลัง กระดาษป้ายราคา */
+  --color-surface: #FFFFFF;
+  --color-ink: #2B2620;         /* ตัวอักษรหลัก */
+  --color-ink-soft: #6B6255;    /* ตัวอักษรรอง */
+  --color-tan: #A9663E;         /* หนัง/แท็ก - accent หลัก */
+  --color-tan-dark: #7C4A2C;
+  --color-denim: #33495C;       /* กางเกงยีนส์ - accent รอง */
+  --color-profit: #4A7C59;      /* กำไร */
+  --color-loss: #B5533C;        /* ขาดทุน */
+  --color-line: #E1D9C8;        /* เส้นขอบ/แบ่ง */
+  --radius: 10px;
+  --shadow-tag: 0 2px 0 var(--color-line), 0 6px 14px rgba(43,38,32,0.06);
+  --font-display: 'Bebas Neue', 'Kanit', sans-serif;
+  --font-body: 'Kanit', 'Work Sans', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-bottom: 72px; /* กันพื้นที่ nav ล่างบนมือถือ */
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: 0.5px;
+  margin: 0 0 4px 0;
+  color: var(--color-ink);
+}
+
+h1 { font-size: 30px; }
+h2 { font-size: 20px; }
+
+a { color: var(--color-denim); }
+
+/* ---------- Layout ---------- */
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 16px 24px;
+}
+
+.topbar {
+  background: var(--color-ink);
+  color: #F6F3EC;
+  padding: 14px 16px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.topbar .brand {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 1px;
+}
+.topbar .brand span { color: var(--color-tan); }
+.topbar .subtitle { font-size: 12px; color: #C9C0AF; }
+
+/* ---------- Tag-style card (signature element) ---------- */
+.tag-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-tag);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.tag-card::before {
+  /* รูเจาะป้ายราคา */
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: 50%;
+}
+
+.stat-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.stat-card .label {
+  font-size: 12px;
+  color: var(--color-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.stat-card .value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  margin-top: 2px;
+}
+.stat-card .value.profit { color: var(--color-profit); }
+.stat-card .value.loss { color: var(--color-loss); }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* ---------- Forms ---------- */
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-size: 13px;
+  color: var(--color-ink-soft);
+  margin-bottom: 4px;
+}
+.field input, .field select, .field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: 2px solid var(--color-tan);
+  outline-offset: 1px;
+}
+.field-row { display: flex; gap: 10px; }
+.field-row .field { flex: 1; }
+
+.btn {
+  display: inline-block;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 18px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  text-align: center;
+}
+.btn-primary { background: var(--color-tan); color: #fff; }
+.btn-primary:hover { background: var(--color-tan-dark); }
+.btn-block { width: 100%; }
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--color-line);
+  color: var(--color-ink);
+}
+.btn-danger { background: var(--color-loss); color: #fff; }
+.btn-sm { padding: 8px 12px; font-size: 13px; }
+
+/* ---------- Item list / sell grid ---------- */
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+.item-tile {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  padding: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.item-tile:active { transform: scale(0.98); }
+.item-tile .name { font-weight: 600; font-size: 14px; }
+.item-tile .meta { font-size: 12px; color: var(--color-ink-soft); margin-top: 2px; }
+.item-tile .price { font-family: var(--font-display); font-size: 20px; color: var(--color-tan-dark); margin-top: 6px; }
+.item-tile.sold { opacity: 0.45; }
+
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-line);
+  color: var(--color-ink-soft);
+}
+.badge.in_stock { background: #E4EEE6; color: var(--color-profit); }
+.badge.sold { background: #F0E4DE; color: var(--color-loss); }
+
+/* ---------- Table ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--color-line); }
+th { color: var(--color-ink-soft); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+
+/* ---------- Bottom nav ---------- */
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--color-ink);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.15);
+}
+.bottom-nav a {
+  color: #C9C0AF;
+  text-decoration: none;
+  font-size: 12px;
+  text-align: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+.bottom-nav a.active { color: #fff; background: var(--color-tan); }
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(43,38,32,0.5);
+  display: flex; align-items: flex-end; justify-content: center;
+  z-index: 50;
+}
+.modal-backdrop.hidden { display: none; }
+.modal-sheet {
+  background: var(--color-surface);
+  width: 100%;
+  max-width: 480px;
+  border-radius: 16px 16px 0 0;
+  padding: 20px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--color-ink-soft);
+  padding: 40px 20px;
+  font-size: 14px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 76px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-ink);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }

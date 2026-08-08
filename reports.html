@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>รายงาน | ระบบร้านเสื้อมือสอง</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Kanit:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/reports.css" />
+  </head>
+  <body>
+    <nav id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="brand-mark">👕</span
+          ><span class="brand-text">Bubbles <span>Gumps</span></span>
+        </div>
+        <button
+          id="navCollapse"
+          class="nav-collapse"
+          aria-label="ย่อ/ขยายเมนู"
+          title="ย่อ/ขยายเมนู"
+        >
+          ‹
+        </button>
+      </div>
+      <div class="sidebar-links">
+        <a href="index.html" title="ภาพรวม"
+          ><span class="icon">📊</span><span class="label">ภาพรวม</span></a
+        >
+        <a href="lots.html" title="ล็อต"
+          ><span class="icon">📦</span><span class="label">ล็อต</span></a
+        >
+        <a href="items.html" title="สินค้า"
+          ><span class="icon">👕</span><span class="label">สินค้า</span></a
+        >
+        <a href="sell.html" title="ขายของ"
+          ><span class="icon">💰</span><span class="label">ขายของ</span></a
+        >
+        <a href="reports.html" title="รายงาน"
+          ><span class="icon">📅</span><span class="label">รายงาน</span></a
+        >
+        <a href="accounting.html" title="บัญชี"
+          ><span class="icon">🧾</span><span class="label">บัญชี</span></a
+        >
+      </div>
+    </nav>
+
+    <div id="mainWrap">
+      <div class="topbar">
+        <div class="subtitle">รายงานยอดขาย</div>
+      </div>
+
+      <div class="page">
+        <h1>สรุปยอด</h1>
+
+        <div class="period-tabs">
+          <button class="period-tab active" data-period="day">รายวัน</button>
+          <button class="period-tab" data-period="month">รายเดือน</button>
+          <button class="period-tab" data-period="year">รายปี</button>
+        </div>
+
+        <div class="tag-card period-picker">
+          <div class="field" id="pickerDay">
+            <label for="pickDate">เลือกวันที่</label>
+            <input type="date" id="pickDate" />
+          </div>
+          <div class="field" id="pickerMonth" style="display: none">
+            <label for="pickMonth">เลือกเดือน</label>
+            <input type="month" id="pickMonth" />
+          </div>
+          <div class="field" id="pickerYear" style="display: none">
+            <label for="pickYear">เลือกปี</label>
+            <select id="pickYear"></select>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="label">ยอดขาย</div>
+            <div class="value" id="repRevenue">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">กำไร/ขาดทุน</div>
+            <div class="value" id="repProfit">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">จำนวนที่ขายได้</div>
+            <div class="value" id="repCount">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">ต้นทุนของที่ขายไป</div>
+            <div class="value" id="repCost">-</div>
+          </div>
+        </div>
+
+        <div class="tag-card">
+          <h2>แยกตามวิธีจ่ายเงิน</h2>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>วิธีจ่าย</th>
+                  <th style="text-align: right">จำนวน</th>
+                  <th style="text-align: right">ยอดรวม</th>
+                </tr>
+              </thead>
+              <tbody id="repPaymentBreakdown">
+                <tr>
+                  <td colspan="3">เลือกช่วงเวลาด้านบน</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tag-card">
+          <h2 id="repTrendTitle">แนวโน้ม</h2>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th id="repTrendCol1">ช่วง</th>
+                  <th style="text-align: right">ขายได้</th>
+                  <th style="text-align: right">ยอดขาย</th>
+                  <th style="text-align: right">กำไร</th>
+                </tr>
+              </thead>
+              <tbody id="repTrendBody">
+                <tr>
+                  <td colspan="4">เลือกช่วงเวลาด้านบน</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tag-card">
+          <h2>รายการที่ขายในช่วงนี้</h2>
+          <div id="repSaleList">
+            <div class="empty-state">เลือกช่วงเวลาด้านบน</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/js/supabaseClient.js"></script>
+    <script src="assets/js/nav.js"></script>
+    <script src="assets/js/reports.js"></script>
+  </body>
+</html>

@@ -1,0 +1,132 @@
+<!-- VIMS2 Lite: หน้า Items เชื่อม Supabase โดยตรงผ่าน assets/js/items.js -->
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>สินค้า | Bubbles Gumps</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/base.css" />
+  <link rel="stylesheet" href="assets/css/items.css" />
+</head>
+<body>
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-header"><div class="brand"><span class="brand-mark">👕</span><span class="brand-text">Bubbles <span>Gumps</span></span></div><button id="navCollapse" class="nav-collapse">‹</button></div>
+  <div class="sidebar-links">
+    <a href="index.html"><span class="icon">📊</span><span class="label">ภาพรวม</span></a>
+    <a href="lots.html"><span class="icon">📦</span><span class="label">ล็อต</span></a>
+    <a href="items.html"><span class="icon">👕</span><span class="label">สินค้า</span></a>
+    <a href="sell.html"><span class="icon">💰</span><span class="label">ขายของ</span></a>
+    <a href="reports.html"><span class="icon">📅</span><span class="label">รายงาน</span></a>
+    <a href="accounting.html"><span class="icon">🧾</span><span class="label">บัญชี</span></a>
+  </div>
+</nav>
+<div id="mainWrap">
+  <div class="topbar"><div class="subtitle">สินค้า / สต็อก</div></div>
+  <main class="page">
+    <div class="page-head">
+      <div><h1>สินค้า</h1><p>รับของเร็วแบบทีละตัว หรือจัดการทั้งกองจากกระสอบ</p></div>
+      <div class="head-actions"><button class="btn btn-ghost" id="openBulk">📦 รับเป็นกอง</button><button class="btn btn-primary" id="focusSingle">＋ เพิ่มสินค้า</button></div>
+    </div>
+
+    <section class="quick-stats" id="quickStats"></section>
+
+    <section class="tag-card" id="singleCard">
+      <div class="section-title"><div><h2>เพิ่มสินค้า 1 ตัว</h2><span>เหมาะกับของที่เข้ามา 2–3 ตัว</span></div></div>
+      <form id="itemForm">
+        <div class="field-row three"><div class="field"><label>ล็อต</label><select id="lotSelect" required></select></div><div class="field"><label>กลุ่ม</label><select id="groupSelect"></select></div><div class="field"><label>ชื่อสินค้า</label><input id="itemName" required placeholder="เช่น Nike Vintage" /></div></div>
+        <div class="field-row four"><div class="field"><label>ไซซ์</label><input id="size" placeholder="M / L / XL" /></div><div class="field"><label>สภาพ</label><select id="condition"><option value="A">A</option><option value="B">B</option></select></div><div class="field"><label>Tier</label><select id="tier"><option value="normal">ปกติ</option><option value="head">งานหัว</option></select></div><div class="field"><label>ราคาขาย</label><input id="sellPrice" type="number" min="0" step="1" required /></div></div>
+        <div class="field-row"><div class="field"><label>รูปสินค้า (สูงสุด 2 รูป)</label><input id="singleImages" type="file" accept="image/*" multiple /></div><div class="field"><label>ต้นทุน/ชิ้น</label><input id="costPrice" type="number" min="0" step="0.01" required /></div></div>
+        <div class="form-actions"><button type="submit" class="btn btn-primary">บันทึกสินค้า</button></div>
+      </form>
+    </section>
+
+    <section class="tag-card"><div class="section-title"><div><h2>สต็อก</h2></div><div class="toolbar"><input id="searchBox" placeholder="ค้นหาสินค้า..."/><select id="filterStatus"><option value="available">พร้อมขาย</option><option value="sold">ขายแล้ว</option><option value="damaged">เสีย</option><option value="all">ทั้งหมด</option></select></div></div><div id="itemList"><div class="empty-state">กำลังโหลด...</div></div></section>
+  </main>
+</div>
+
+<div class="modal-backdrop hidden" id="bulkModal">
+  <div class="modal-sheet bulk-sheet">
+    <div class="modal-head"><div><h2>รับสินค้าเป็นกอง</h2><p>สร้างกลุ่มราคาเฉพาะ Lot แล้วลงของทีละตัวแบบเร็ว</p></div><button class="icon-btn" id="closeBulk">×</button></div>
+    <div class="bulk-steps"><span class="active" data-step-label="1">1. เลือก Lot / กลุ่ม</span><span data-step-label="2">2. ลงสินค้า</span><span data-step-label="3">3. ตรวจสอบ</span></div>
+    <div id="bulkStep1">
+      <div class="field-row"><div class="field"><label>Lot</label><select id="bulkLot"></select></div><div class="field"><label>จำนวนที่ต้องลง</label><input id="groupCount" type="number" min="1" max="200" value="1" /></div></div>
+      <div class="group-create"><div class="field"><label>ชื่อกลุ่ม</label><input id="newGroupName" placeholder="เช่น ฿100+ / งานหัว / Vintage" /></div><div class="field"><label>ราคาตั้งต้น</label><input id="newGroupPrice" type="number" min="0" value="199" /></div><div class="field"><label>Tier</label><select id="newGroupTier"><option value="normal">ปกติ</option><option value="head">งานหัว</option></select></div><button class="btn btn-ghost" id="createGroup">＋ เพิ่มกลุ่ม</button></div>
+      <div id="groupList" class="group-list"></div>
+      <div class="field"><label>กลุ่มสำหรับ Import</label><select id="importGroupSelect"></select></div><div class="excel-tools"><button class="btn btn-ghost btn-sm" id="downloadTemplate">📊 ดาวน์โหลด Excel Template</button><label class="btn btn-ghost btn-sm file-btn">Import Excel <input id="excelInput" type="file" accept=".xlsx,.xls,.csv" hidden></label><label class="btn btn-ghost btn-sm file-btn">รูปตาม Excel <input id="excelImages" type="file" accept="image/*" multiple hidden></label><button class="btn btn-primary btn-sm" id="importExcelBtn">นำเข้า</button></div><div class="callout">💡 Excel ใช้คอลัมน์ <b>item_name, size, condition, tier, price, photo_count</b> โดย photo_count = 1 หรือ 2 แล้วเลือกไฟล์รูปทั้งหมดตามลำดับ IMG_... ของ iPhone ระบบจะจับรูปตาม photo_count ให้เอง</div>
+      <div class="callout">💡 แนะนำ: แกะกระสอบ → คัดเป็นกอง → สร้างกลุ่มตามราคาของ Lot นั้น → ลงข้อมูลเองทีละตัว หรือ Import Excel ทั้งกองก็ได้</div>
+    </div>
+    <div id="bulkStep2" class="hidden">
+      <!-- Bulk Table: จุดตรวจสอบกลางก่อนเขียน Items ลง Supabase -->
+      <div id="bulkTablePanel" class="bulk-table-panel hidden">
+        <div class="bulk-table-head">
+          <div>
+            <h3>ตรวจสอบสินค้าทั้งกอง</h3>
+            <p>แก้ชื่อ / Size / A-B / งานหัว / ราคาได้ในตารางเดียว แล้วค่อยบันทึกทั้งหมด</p>
+          </div>
+          <div class="bulk-table-meta"><b id="bulkTableCount">0</b><span>รายการ</span></div>
+        </div>
+        <div class="bulk-table-wrap">
+          <table class="bulk-table">
+            <thead><tr><th>#</th><th>รูป</th><th>ชื่อสินค้า</th><th>Size</th><th>สภาพ</th><th>Tier</th><th>ราคาขาย</th><th>ต้นทุน</th></tr></thead>
+            <tbody id="bulkTableBody"></tbody>
+          </table>
+        </div>
+        <div class="bulk-table-tools">
+          <!-- เครื่องมือช่วยกรอก: ทำงานกับช่อง/แถวที่กำลัง focus โดยไม่ต้องแก้ทีละ 200 ตัว -->
+          <div class="bulk-shortcuts">
+            <span>⌨️ Enter = แถวถัดไป</span>
+            <span>Ctrl+Enter = Fill ลง</span>
+            <span>Ctrl+V = วางจาก Excel</span>
+          </div>
+          <div class="bulk-table-tool-buttons">
+            <button type="button" class="btn btn-ghost btn-sm" id="fillDownField" title="คัดลอกค่าช่องที่กำลัง focus ลงทุกแถวด้านล่าง">↓ Fill ลง</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="copyCurrentRow" title="คัดลอกข้อมูลแถวปัจจุบันเป็น TSV สำหรับ Excel">คัดลอกแถว</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="pasteClipboard" title="วางข้อมูลจาก Excel เริ่มที่ช่องที่กำลัง focus">วางจาก Excel</button>
+          </div>
+        </div>
+        <div class="bulk-table-actions">
+          <button type="button" class="btn btn-ghost" id="bulkTableBack">← กลับ</button>
+          <button type="button" class="btn btn-primary" id="saveBulkTable">บันทึกทั้งหมด <span id="saveBulkTableLabel"></span></button>
+        </div>
+      </div>
+
+      <!-- Quick Entry: ใช้เมื่อไม่ได้เตรียม Photo Queue และต้องการลงทีละตัว -->
+      <div id="quickEntryPanel">
+      <div class="bulk-progress"><div><b id="progressTitle">กลุ่ม</b><span id="progressMeta"></span></div><div class="progress-track"><div id="progressBar"></div></div></div>
+      <form id="quickEntryForm" class="quick-entry">
+        <div class="photo-box"><div id="photoPreview" class="photo-preview"><span>📷</span><small>เลือก 1–2 รูป</small></div><input id="bulkImages" type="file" accept="image/*" multiple /></div>
+        <div class="entry-fields"><div class="field"><label>ชื่อสินค้า</label><input id="bulkName" required autofocus /></div><div class="field-row"><div class="field"><label>ไซซ์</label><input id="bulkSize" /></div><div class="field"><label>สภาพ</label><select id="bulkCondition"><option value="A">A</option><option value="B">B</option></select></div></div><div class="field-row"><div class="field"><label>Tier</label><select id="bulkTier"><option value="normal">ปกติ</option><option value="head">งานหัว</option></select></div><div class="field"><label>ราคาขาย</label><input id="bulkPrice" type="number" min="0" required /></div></div><div class="field"><label>ต้นทุน/ชิ้น</label><input id="bulkCost" type="number" min="0" step="0.01" required /></div><div class="entry-actions"><button type="button" class="btn btn-ghost" id="backToGroups">← กลับ</button><button type="submit" class="btn btn-primary">บันทึก & ตัวถัดไป →</button></div></div>
+      </form>
+      </div>
+    </div>
+    <div id="bulkStep3" class="hidden"><div id="bulkSummary"></div><div class="entry-actions"><button class="btn btn-ghost" id="reviewBack">← กลับ</button><button class="btn btn-primary" id="finishBulk">เสร็จสิ้น</button></div></div>
+
+    <!-- Photo Queue: เตรียมรูปทั้งกองก่อนกรอกรายละเอียด โดยไม่ต้อง rename รูป iPhone -->
+    <div id="photoQueuePanel" class="photo-queue-panel hidden">
+      <div class="modal-head">
+        <div>
+          <h2>📷 Photo Queue</h2>
+          <p>เลือกรูปทั้งหมดของกองนี้ แล้วกำหนดว่ารูปไหนเป็นรูปหลัก/รูปที่ 2 ของสินค้า</p>
+        </div>
+        <button class="icon-btn" id="closePhotoQueue">×</button>
+      </div>
+      <div class="photo-queue-toolbar">
+        <div class="field"><label>กลุ่ม</label><select id="photoQueueGroup"></select></div>
+        <div class="field"><label>จำนวนสินค้า</label><input id="photoQueueItemCount" type="number" min="1" max="200" value="20" /></div>
+        <div class="field"><label>เลือกรูป</label><label class="btn btn-ghost file-btn">เลือกรูปจาก iPhone <input id="photoQueueInput" type="file" accept="image/*" multiple hidden /></label></div>
+        <div class="field"><label>รูปทั้งหมด</label><b id="photoQueueCount">0</b></div>
+      </div>
+      <div class="callout">💡 วิธีเร็ว: ตั้งจำนวนสินค้า เช่น 50 ตัว → เลือกรูปทั้งหมด → ระบบถือว่ารูปทั้งหมดเป็น “รูปหลัก” ก่อน → เปลี่ยนรูปที่ต้องการเป็น “รูปที่ 2 ของสินค้า #...” ได้ทีละรูป โดยไม่ต้องเปลี่ยนชื่อ IMG_XXXX</div>
+      <div id="photoQueueGrid" class="photo-queue-grid"></div>
+      <div class="entry-actions"><button class="btn btn-ghost" id="cancelPhotoQueue">ยกเลิก</button><button class="btn btn-primary" id="startPhotoQueueEntry">ใช้รูปชุดนี้ → ลงรายละเอียด</button></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/js/supabaseClient.js"></script><script src="assets/js/nav.js"></script><script src="assets/js/items.js"></script>
+</body>
+</html>

@@ -1,0 +1,694 @@
+let allLots = [];
+let allGroups = [];
+let itemsCache = [];
+let editingItemId = null;
+// เก็บสถานะการลงสินค้าแบบทีละตัวของ Bulk Receiving
+let bulkState = { lotId:null, group:null, index:0, rows:[], inserted:0, photoPairs:null };
+// เก็บรูปชั่วคราวของ Photo Queue ไว้ใน browser ก่อนบันทึกลง Supabase
+let photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{} };
+// เก็บแถว Bulk Table ชั่วคราว: ตารางนี้เป็น staging ก่อน insert เข้า Supabase
+let bulkTableState = { lotId:null, group:null, rows:[], source:'photo-queue' };
+
+const $ = (id) => document.getElementById(id);
+
+async function loadLots() {
+  const { data, error } = await supabaseClient.from('lots').select('*').order('purchase_date', {ascending:false});
+  if (error) return showToast('โหลด Lot ไม่สำเร็จ: ' + error.message);
+  allLots = data || [];
+  ['lotSelect','bulkLot'].forEach(id => {
+    const el = $(id); if (!el) return;
+    el.innerHTML = allLots.length ? allLots.map(l => `<option value="${l.id}">${escapeHtml(l.lot_name)}</option>`).join('') : '<option value="">-- ยังไม่มี Lot --</option>';
+  });
+  await loadGroups();
+  updateQuickStats();
+}
+
+async function loadGroups(lotId = $('lotSelect')?.value) {
+  if (!lotId) { allGroups=[]; renderGroups(); renderGroupOptions(); return; }
+  const { data, error } = await supabaseClient.from('lot_groups').select('*').eq('lot_id', lotId).order('sort_order');
+  if (error) return showToast('โหลดกลุ่มไม่สำเร็จ: ' + error.message);
+  allGroups = data || [];
+  renderGroups(); renderGroupOptions();
+}
+
+function renderGroupOptions() {
+  const options = '<option value="">ไม่ระบุกลุ่ม</option>' + allGroups.map(g => `<option value="${g.id}">${escapeHtml(g.group_name)} · ${formatBaht(g.base_price)}</option>`).join('');
+  if ($('groupSelect')) $('groupSelect').innerHTML = options; if ($('importGroupSelect')) $('importGroupSelect').innerHTML = allGroups.map(g => `<option value="${g.id}">${escapeHtml(g.group_name)} · ${formatBaht(g.base_price)}</option>`).join('');
+}
+
+function renderGroups() {
+  const el = $('groupList'); if (!el) return;
+  if (!allGroups.length) { el.innerHTML = '<div class="empty-state">Lot นี้ยังไม่มีกลุ่ม กดเพิ่มกลุ่มด้านบนได้เลย</div>'; return; }
+  el.innerHTML = allGroups.map(g => `<div class="group-row"><div><b>${escapeHtml(g.group_name)}</b><span>${g.tier==='head'?'งานหัว':'ปกติ'} · ราคาเริ่ม ${formatBaht(g.base_price)}</span></div><div class="group-actions"><button class="btn btn-ghost btn-sm" data-photo-group="${g.id}">📷 รูปก่อน</button><button class="btn btn-primary btn-sm" data-start-group="${g.id}">เริ่มลงกอง</button></div></div>`).join('');
+  el.querySelectorAll('[data-start-group]').forEach(btn => btn.onclick = () => startGroup(btn.dataset.startGroup));
+  // ปุ่มนี้เปิด Photo Queue เพื่อจัดรูปก่อนกรอกรายละเอียดสินค้า
+  el.querySelectorAll('[data-photo-group]').forEach(btn => btn.onclick = () => openPhotoQueue(btn.dataset.photoGroup));
+}
+
+$('lotSelect')?.addEventListener('change', () => loadGroups($('lotSelect').value));
+$('bulkLot')?.addEventListener('change', () => { loadGroups($('bulkLot').value); });
+$('createGroup')?.addEventListener('click', async () => {
+  const lotId = $('bulkLot').value;
+  const name = $('newGroupName').value.trim();
+  const price = Number($('newGroupPrice').value || 0);
+  const tier = $('newGroupTier').value;
+  if (!lotId || !name) return showToast('เลือก Lot และใส่ชื่อกลุ่มก่อน');
+  const { error } = await supabaseClient.from('lot_groups').insert({lot_id:lotId, group_name:name, base_price:price, tier, sort_order:allGroups.length});
+  if (error) return showToast('สร้างกลุ่มไม่สำเร็จ: ' + error.message);
+  $('newGroupName').value=''; await loadGroups(lotId); showToast('เพิ่มกลุ่มแล้ว');
+});
+
+$('itemForm')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const lotId = $('lotSelect').value;
+  if (!lotId) return showToast('กรุณาสร้าง Lot ก่อน');
+  const groupId = $('groupSelect').value || null;
+  const group = allGroups.find(g => g.id === groupId);
+  const payload = {
+    lot_id: lotId, group_id: groupId, item_name: $('itemName').value.trim(), size: $('size').value.trim(),
+    condition: $('condition').value, tier: $('tier').value, cost_price: Number($('costPrice').value || 0),
+    base_price: group ? Number(group.base_price) : Number($('sellPrice').value || 0), current_price: Number($('sellPrice').value || 0), status:'available'
+  };
+  if (!payload.item_name) return showToast('กรุณาใส่ชื่อสินค้า');
+  const files = Array.from($('singleImages').files || []).slice(0,2);
+  const { data, error } = await supabaseClient.from('items').insert(payload).select().single();
+  if (error) return showToast('บันทึกไม่สำเร็จ: ' + error.message);
+  if (files.length) await uploadItemImages(data.id, files);
+  showToast('เพิ่มสินค้าเรียบร้อย');
+  $('itemForm').reset(); $('condition').value='A'; $('tier').value='normal'; $('lotSelect').value=lotId; await loadGroups(lotId); await loadItems();
+});
+
+async function uploadItemImages(itemId, files) {
+  for (let i=0; i<Math.min(files.length,2); i++) {
+    const file=files[i]; const ext=(file.name.split('.').pop()||'jpg').toLowerCase(); const path=`${itemId}/${crypto.randomUUID()}.${ext}`;
+    const { error: upErr } = await supabaseClient.storage.from('item-images').upload(path,file,{upsert:false,contentType:file.type});
+    if (upErr) { console.error(upErr); showToast('อัปโหลดรูปบางรูปไม่สำเร็จ'); continue; }
+    const { data:urlData } = supabaseClient.storage.from('item-images').getPublicUrl(path);
+    await supabaseClient.from('item_images').upsert({item_id:itemId,image_url:urlData.publicUrl,storage_path:path,sort_order:i+1},{onConflict:'item_id,sort_order'});
+  }
+}
+
+$('openBulk')?.addEventListener('click', async () => { $('bulkModal').classList.remove('hidden'); $('bulkLot').value=$('lotSelect').value; await loadGroups($('bulkLot').value); showBulkStep(1); });
+$('closeBulk')?.addEventListener('click', () => $('bulkModal').classList.add('hidden'));
+$('backToGroups')?.addEventListener('click', () => showBulkStep(1));
+$('reviewBack')?.addEventListener('click', () => showBulkStep(1));
+$('finishBulk')?.addEventListener('click', () => { $('bulkModal').classList.add('hidden'); loadItems(); updateQuickStats(); });
+
+function showBulkStep(n) {
+  ['bulkStep1','bulkStep2','bulkStep3'].forEach((id,i)=>$(id).classList.toggle('hidden',i!==n-1));
+  document.querySelectorAll('[data-step-label]').forEach(x=>x.classList.toggle('active',Number(x.dataset.stepLabel)===n));
+}
+
+async function startGroup(groupId) {
+  const group = allGroups.find(g=>g.id===groupId); if(!group) return;
+  const count = Math.max(1, Math.min(200, Number($('groupCount').value||1)));
+  bulkState={lotId:group.lot_id,group,index:0,rows:Array.from({length:count},()=>null),inserted:0};
+  $('bulkImages').value=''; $('bulkName').value=''; $('bulkSize').value=''; $('bulkCondition').value='A'; $('bulkTier').value=group.tier; $('bulkCost').value=await getLotAvgCost(group.lot_id); $('bulkPrice').value=group.base_price;
+  renderBulkProgress(); showBulkStep(2);
+}
+
+async function getLotAvgCost(lotId) {
+  const lot=allLots.find(x=>x.id===lotId); return lot && Number(lot.total_items)>0 ? (Number(lot.total_cost)/Number(lot.total_items)).toFixed(2) : '0';
+}
+function renderBulkProgress(){ const n=bulkState.index+1,total=bulkState.rows.length; $('progressTitle').textContent=bulkState.group.group_name; $('progressMeta').textContent=`${n} / ${total}`; $('progressBar').style.width=`${Math.round((bulkState.index/total)*100)}%`; }
+$('bulkImages')?.addEventListener('change', previewBulkImages);
+function previewBulkImages(){ const files=Array.from($('bulkImages').files||[]).slice(0,2); $('photoPreview').innerHTML=files.length?files.map(f=>`<img src="${URL.createObjectURL(f)}" alt="">`).join(''):'<span>📷</span><small>เลือก 1–2 รูป</small>'; if(files.length>2) showToast('ระบบใช้แค่ 2 รูปแรก'); }
+$('quickEntryForm')?.addEventListener('submit', async e=>{
+  e.preventDefault();
+  const files=bulkState.photoPairs ? bulkState.photoPairs[bulkState.index].filter(Boolean) : Array.from($('bulkImages').files||[]).slice(0,2); if(!files.length) return showToast('แนะนำให้ใส่อย่างน้อย 1 รูป');
+  const payload={lot_id:bulkState.lotId,group_id:bulkState.group.id,item_name:$('bulkName').value.trim(),size:$('bulkSize').value.trim(),condition:$('bulkCondition').value,tier:$('bulkTier').value,cost_price:Number($('bulkCost').value||0),base_price:Number(bulkState.group.base_price||0),current_price:Number($('bulkPrice').value||0),status:'available'};
+  if(!payload.item_name) return showToast('กรุณาใส่ชื่อสินค้า');
+  const {data,error}=await supabaseClient.from('items').insert(payload).select().single(); if(error) return showToast('บันทึกไม่สำเร็จ: '+error.message);
+  await uploadItemImages(data.id,files); bulkState.rows[bulkState.index]=data; bulkState.inserted++; bulkState.index++;
+  if(bulkState.index>=bulkState.rows.length){ $('bulkSummary').innerHTML=`<div class="success-box">✓ ลงกลุ่ม <b>${escapeHtml(bulkState.group.group_name)}</b> ครบ ${bulkState.inserted} รายการแล้ว</div>`; showBulkStep(3); }
+  else if(bulkState.photoPairs){ await prepareQueuedItem(bulkState.index); }
+  else { $('quickEntryForm').reset(); $('bulkCondition').value='A'; $('bulkTier').value=bulkState.group.tier; $('bulkCost').value=await getLotAvgCost(bulkState.lotId); $('bulkPrice').value=bulkState.group.base_price; $('photoPreview').innerHTML='<span>📷</span><small>เลือก 1–2 รูป</small>'; renderBulkProgress(); $('bulkName').focus(); }
+});
+
+$('focusSingle')?.addEventListener('click',()=>{ $('itemName').focus(); window.scrollTo({top:0,behavior:'smooth'}); });
+$('filterStatus')?.addEventListener('change',loadItems); $('searchBox')?.addEventListener('input',loadItems);
+async function loadItems(){
+  const status=$('filterStatus').value,q=($('searchBox').value||'').trim(); let query=supabaseClient.from('items').select('*, lots(lot_name), lot_groups(group_name)').order('created_at',{ascending:false}); if(status!=='all') query=query.eq('status',status); if(q) query=query.ilike('item_name',`%${q}%`);
+  const {data,error}=await query; if(error){$('itemList').innerHTML='<div class="empty-state">โหลดข้อมูลไม่สำเร็จ</div>';return;} itemsCache=data||[]; renderItems(); updateQuickStats();
+}
+async function renderItems(){ if(!itemsCache.length){$('itemList').innerHTML='<div class="empty-state">ไม่มีสินค้าในรายการนี้</div>';return;} const ids=itemsCache.map(i=>i.id); const {data:imgs}=await supabaseClient.from('item_images').select('*').in('item_id',ids).order('sort_order'); const byItem={}; (imgs||[]).forEach(x=>(byItem[x.item_id]??=[]).push(x)); $('itemList').innerHTML=itemsCache.map(i=>{const im=(byItem[i.id]||[])[0]; return `<div class="stock-row"><div class="thumb">${im?`<img src="${im.image_url}" alt="">`:'👕'}</div><div class="stock-main"><b>${escapeHtml(i.item_name)}</b><span>${escapeHtml(i.size||'-')} · ${i.condition} · ${i.tier==='head'?'งานหัว':'ปกติ'} · ${escapeHtml(i.lots?.lot_name||'-')}</span></div><div class="stock-price"><small>ต้นทุน ${formatBaht(i.cost_price)}</small><b>${formatBaht(i.current_price)}</b></div><span class="badge ${i.status}">${i.status==='available'?'พร้อมขาย':i.status==='sold'?'ขายแล้ว':'เสีย'}</span></div>`;}).join(''); }
+async function updateQuickStats(){ const {data,error}=await supabaseClient.from('items').select('status,cost_price'); if(error)return; const rows=data||[]; const available=rows.filter(x=>x.status==='available'); const sold=rows.filter(x=>x.status==='sold'); const value=available.reduce((s,x)=>s+Number(x.cost_price||0),0); $('quickStats').innerHTML=`<div><span>สินค้าทั้งหมด</span><b>${rows.length}</b></div><div><span>พร้อมขาย</span><b>${available.length}</b></div><div><span>ขายแล้ว</span><b>${sold.length}</b></div><div><span>ต้นทุนคงเหลือ</span><b>${formatBaht(value)}</b></div>`; }
+function escapeHtml(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function showToast(msg){const t=$('toast');if(!t)return;t.textContent=msg;t.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),2600);}
+loadLots(); loadItems();
+
+
+// ============================================================
+// PHOTO QUEUE — workflow ถ่ายรูปจำนวนมากก่อนกรอกรายละเอียด
+// ============================================================
+
+// เปิด Photo Queue สำหรับ Group ที่เลือก
+async function openPhotoQueue(groupId) {
+  // หา Group จาก memory เพื่อรู้ Lot และราคาเริ่มต้น
+  const group = allGroups.find((item) => item.id === groupId);
+  // ถ้าไม่พบ Group ให้หยุด
+  if (!group) return showToast('ไม่พบกลุ่ม');
+  // reset state ของ Photo Queue ทุกครั้งที่เริ่มกองใหม่
+  photoQueueState = { lotId: group.lot_id, group, itemCount: 20, files: [], roles: {} };
+  // แสดงชื่อ Group ใน modal
+  $('photoQueueGroup').innerHTML = `<option value="${group.id}">${escapeHtml(group.group_name)}</option>`;
+  // ใส่ค่า default จำนวนสินค้า
+  $('photoQueueItemCount').value = 20;
+  // ล้าง input รูปเก่า
+  $('photoQueueInput').value = '';
+  // เปิด panel
+  $('photoQueuePanel').classList.remove('hidden');
+  // render สถานะว่าง
+  renderPhotoQueue();
+}
+
+// ปิด Photo Queue โดยไม่เขียนข้อมูลลงฐานข้อมูล
+function closePhotoQueue() {
+  $('photoQueuePanel').classList.add('hidden');
+  photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{} };
+}
+
+// ปุ่มปิด/ยกเลิก Photo Queue
+$('closePhotoQueue')?.addEventListener('click', closePhotoQueue);
+$('cancelPhotoQueue')?.addEventListener('click', closePhotoQueue);
+
+// เมื่อผู้ใช้เปลี่ยนจำนวนสินค้า ให้ validate ใหม่และ render
+$('photoQueueItemCount')?.addEventListener('change', () => {
+  // จำกัดจำนวนไว้ไม่เกิน 200
+  photoQueueState.itemCount = Math.max(1, Math.min(200, Number($('photoQueueItemCount').value || 1)));
+  // ถ้า role บางตัวชี้ไป Item ที่เกินจำนวนใหม่ ให้ลบ role นั้น
+  Object.keys(photoQueueState.roles).forEach((key) => { if (photoQueueState.roles[key] > photoQueueState.itemCount) delete photoQueueState.roles[key]; });
+  // render ใหม่
+  renderPhotoQueue();
+});
+
+// รับรูปจาก iPhone และเรียงชื่อแบบ numeric เพื่อให้ IMG_9 มาก่อน IMG_10 อย่างถูกต้อง
+$('photoQueueInput')?.addEventListener('change', (event) => {
+  // อ่าน File object ทั้งหมดจาก input
+  photoQueueState.files = Array.from(event.target.files || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric:true, sensitivity:'base' }));
+  // reset role ของรูปทั้งหมด เพราะชุดรูปเปลี่ยนแล้ว
+  photoQueueState.roles = {};
+  // ถ้ารูปหลักน้อยกว่าจำนวนสินค้า ให้เตือนภายหลังตอนเริ่ม
+  renderPhotoQueue();
+});
+
+// แสดง grid รูปทั้งหมดพร้อม dropdown บอกว่าเป็นรูปหลักหรือรูปที่ 2 ของ Item ไหน
+function renderPhotoQueue() {
+  // อ่านจำนวนรูปที่เลือก
+  const total = photoQueueState.files.length;
+  // แสดงจำนวนรูป
+  $('photoQueueCount').textContent = total;
+  // ถ้ายังไม่มีรูป ให้แสดงคำแนะนำ
+  if (!total) {
+    $('photoQueueGrid').innerHTML = '<div class="empty-state">ยังไม่ได้เลือกรูป เลือกรูปจาก iPhone ได้ครั้งเดียวทั้งกอง</div>';
+    return;
+  }
+  // สร้างการ์ดแต่ละรูป
+  $('photoQueueGrid').innerHTML = photoQueueState.files.map((file, index) => {
+    // อ่าน role ของรูปนี้: 0 หมายถึงรูปหลัก, 1..200 หมายถึงรูปที่ 2 ของ Item นั้น
+    const role = photoQueueState.roles[index] || 0;
+    // ถ้า role เป็นเลข แปลว่าเป็นรูปที่ 2 ของ Item นั้น
+    const secondary = Number(role) > 0;
+    // class ช่วยให้เห็นรูปที่ถูกใช้เป็นรูปที่ 2 ชัดเจน
+    const className = secondary ? 'photo-queue-card is-secondary' : 'photo-queue-card';
+    // สร้าง URL ชั่วคราวสำหรับ preview ใน browser
+    const url = URL.createObjectURL(file);
+    // สร้าง option รูปหลักและรูปที่ 2 ของ Item 1..N
+    const options = ['<option value="0">รูปหลัก</option>'].concat(Array.from({ length: photoQueueState.itemCount }, (_, itemIndex) => `<option value="${itemIndex + 1}" ${role === itemIndex + 1 ? 'selected' : ''}>รูปที่ 2 → สินค้า #${itemIndex + 1}</option>`)).join('');
+    // คืน HTML ของ card
+    return `<div class="${className}"><img src="${url}" alt=""><b>${escapeHtml(file.name)}</b><select data-queue-role="${index}">${options}</select></div>`;
+  }).join('');
+  // ผูก event ทุก dropdown ให้เปลี่ยน role ใน state
+  $('photoQueueGrid').querySelectorAll('[data-queue-role]').forEach((select) => {
+    select.onchange = () => {
+      // อ่าน index ของไฟล์จาก data attribute
+      const index = Number(select.dataset.queueRole);
+      // อ่าน role ที่ผู้ใช้เลือก
+      const role = Number(select.value);
+      // ถ้าเลือก 0 ให้ลบ role ออกจาก map เพราะถือว่าเป็นรูปหลัก
+      if (role === 0) delete photoQueueState.roles[index];
+      // ถ้าเลือกเลข ให้เก็บว่าเป็นรูปที่ 2 ของ Item ไหน
+      else photoQueueState.roles[index] = role;
+      // render ใหม่เพื่ออัปเดตสีของ card
+      renderPhotoQueue();
+    };
+  });
+}
+
+// สร้างคู่รูป [primary, secondary] สำหรับ Item 1..N จาก staging ใน Photo Queue
+function buildPhotoPairsFromQueue() {
+  // สร้าง array ของ Item ตามจำนวนที่ผู้ใช้กำหนด
+  const pairs = Array.from({ length: photoQueueState.itemCount }, () => [null, null]);
+  // รูปที่ไม่ได้กำหนดเป็นรูปที่ 2 จะถูกจับเป็นรูปหลักตามลำดับ filename
+  const primaryFiles = photoQueueState.files.filter((_, index) => !photoQueueState.roles[index]);
+  // ตรวจว่ารูปหลักพอสำหรับจำนวนสินค้าไหม
+  if (primaryFiles.length < photoQueueState.itemCount) return null;
+  // จับรูปหลักให้ Item 1..N
+  primaryFiles.slice(0, photoQueueState.itemCount).forEach((file, index) => { pairs[index][0] = file; });
+  // รูปที่กำหนดเป็นรูปที่ 2 จะถูกผูกตาม Item ที่เลือกใน dropdown
+  Object.entries(photoQueueState.roles).forEach(([fileIndex, itemNumber]) => {
+    // itemNumber เป็น 1-based จึงต้องลบ 1 ก่อนเข้ array
+    const itemIndex = Number(itemNumber) - 1;
+    // ใส่รูปที่ 2 เฉพาะถ้า Item อยู่ในช่วงที่ถูกต้อง
+    if (pairs[itemIndex]) pairs[itemIndex][1] = photoQueueState.files[Number(fileIndex)];
+  });
+  // คืนคู่รูปทั้งหมดให้ Bulk Entry
+  return pairs;
+}
+
+// เริ่ม Bulk Entry จาก Photo Queue
+$('startPhotoQueueEntry')?.addEventListener('click', async () => {
+  // อ่านจำนวน Item ที่ผู้ใช้ต้องการสร้างจาก Photo Queue
+  photoQueueState.itemCount = Math.max(1, Math.min(200, Number($('photoQueueItemCount').value || 1)));
+  // สร้างคู่รูป [รูปหลัก, รูปที่ 2] ตาม mapping ที่ผู้ใช้เลือกไว้
+  const pairs = buildPhotoPairsFromQueue();
+  // ถ้ารูปหลักไม่พอ ให้หยุดก่อนสร้างตาราง
+  if (!pairs) return showToast(`รูปหลักไม่พอ: ต้องมีอย่างน้อย ${photoQueueState.itemCount} รูป`);
+  // โหลดต้นทุนเฉลี่ยของ Lot ครั้งเดียว แล้วใช้เป็นค่าเริ่มต้นให้ทุกแถว
+  const cost = await getLotAvgCost(photoQueueState.lotId);
+  // สร้าง staging rows ใน memory; ยังไม่เขียน Database จนกด “บันทึกทั้งหมด”
+  bulkTableState = {
+    lotId: photoQueueState.lotId,
+    group: photoQueueState.group,
+    source: 'photo-queue',
+    rows: pairs.map((pair, index) => ({
+      index,
+      files: pair.filter(Boolean),
+      item_name: '',
+      size: '',
+      condition: 'A',
+      tier: photoQueueState.group.tier || 'normal',
+      price: Number(photoQueueState.group.base_price || 0),
+      cost: Number(cost || 0)
+    }))
+  };
+  // ปิด Photo Queue หลังเตรียมข้อมูลสำเร็จ
+  $('photoQueuePanel').classList.add('hidden');
+  // แสดง Bulk Table เพื่อให้แก้ข้อมูลทั้งกองพร้อมกัน
+  showBulkTable();
+  showBulkStep(2);
+});
+
+// แสดง Bulk Table และซ่อน Quick Entry เพื่อให้ผู้ใช้ทำงานทั้งกองในครั้งเดียว
+function showBulkTable() {
+  $('bulkTablePanel').classList.remove('hidden');
+  $('quickEntryPanel').classList.add('hidden');
+  $('bulkTableCount').textContent = bulkTableState.rows.length;
+  $('saveBulkTableLabel').textContent = `(${bulkTableState.rows.length} รายการ)`;
+  renderBulkTable();
+}
+
+// คืน UI จาก Bulk Table ไปยัง Step 1 โดยไม่บันทึกข้อมูล
+$('bulkTableBack')?.addEventListener('click', () => {
+  $('bulkTablePanel').classList.add('hidden');
+  $('quickEntryPanel').classList.remove('hidden');
+  showBulkStep(1);
+});
+
+// วาดตารางจาก state; input ทุกช่องผูก data-row/data-field เพื่อแก้ state โดยตรง
+function renderBulkTable() {
+  const rows = bulkTableState.rows || [];
+  $('bulkTableBody').innerHTML = rows.map((row, index) => {
+    // สร้าง thumbnail จาก File object ที่ยังอยู่ใน browser memory
+    const photos = row.files.map(file => `<img src="${URL.createObjectURL(file)}" alt="">`).join('');
+    // แสดงข้อความเตือนเมื่อชื่อสินค้ายังว่าง
+    const invalid = !String(row.item_name || '').trim();
+    return `<tr class="${invalid ? 'bulk-table-row-invalid' : ''}" data-row="${index}">
+      <td class="row-no">${index + 1}</td>
+      <td><div class="row-photos">${photos || '<span>📷</span>'}</div></td>
+      <td><input class="name-input" data-row="${index}" data-field="item_name" value="${escapeHtml(row.item_name)}" placeholder="เช่น Nike Vintage"><span class="bulk-table-status" data-error-for="${index}">${invalid ? 'ต้องใส่ชื่อสินค้า' : ''}</span></td>
+      <td><input data-row="${index}" data-field="size" value="${escapeHtml(row.size)}" placeholder="M"></td>
+      <td><select data-row="${index}" data-field="condition"><option value="A" ${row.condition==='A'?'selected':''}>A</option><option value="B" ${row.condition==='B'?'selected':''}>B</option></select></td>
+      <td><select data-row="${index}" data-field="tier"><option value="normal" ${row.tier==='normal'?'selected':''}>ปกติ</option><option value="head" ${row.tier==='head'?'selected':''}>งานหัว</option></select></td>
+      <td><input class="price-input" type="number" min="0" step="1" data-row="${index}" data-field="price" value="${Number(row.price||0)}"></td>
+      <td><input class="cost-input" type="number" min="0" step="0.01" data-row="${index}" data-field="cost" value="${Number(row.cost||0)}" readonly title="ต้นทุนเฉลี่ยจาก Lot"></td>
+    </tr>`;
+  }).join('');
+  // ผูก event ให้ input/select ทุกตัวแก้ state โดยไม่ต้อง re-render ทั้งตารางทุกครั้ง
+  $('bulkTableBody').querySelectorAll('[data-row][data-field]').forEach(el => {
+    el.addEventListener('input', updateBulkTableField);
+    el.addEventListener('change', updateBulkTableField);
+  });
+  // bind keyboard/clipboard หลัง render เพราะ input/select ถูกสร้างใหม่ทุกครั้ง
+  bindBulkTableKeyboard();
+}
+
+// รับค่าจาก input/select แล้วอัปเดต staging row ใน memory
+function updateBulkTableField(event) {
+  const el = event.currentTarget;
+  const rowIndex = Number(el.dataset.row);
+  const field = el.dataset.field;
+  if (!bulkTableState.rows[rowIndex]) return;
+  // แปลงราคา/ต้นทุนเป็น Number; field อื่นเก็บเป็น string
+  bulkTableState.rows[rowIndex][field] = ['price','cost'].includes(field) ? Number(el.value || 0) : el.value;
+  // อัปเดต validation ของแถวโดยไม่สร้าง DOM ใหม่ทั้งหมด
+  const rowEl = el.closest('tr');
+  const errorEl = rowEl?.querySelector(`[data-error-for="${rowIndex}"]`);
+  const invalid = !String(bulkTableState.rows[rowIndex].item_name || '').trim();
+  rowEl?.classList.toggle('bulk-table-row-invalid', invalid);
+  if (errorEl) errorEl.textContent = invalid ? 'ต้องใส่ชื่อสินค้า' : '';
+}
+
+// ------------------------------------------------------------
+// Bulk Table Power Tools
+// ส่วนนี้เป็น UX layer ของตาราง: ไม่แตะ Supabase โดยตรง
+// Flow: HTML input/select -> bulkTableState -> validate -> Save -> Supabase
+// ------------------------------------------------------------
+let bulkTableFocus = { row: 0, field: 'item_name' };
+const BULK_EDITABLE_FIELDS = ['item_name', 'size', 'condition', 'tier', 'price'];
+
+// จำว่าผู้ใช้กำลังแก้ช่องไหน เพื่อให้ Enter / Fill ลง / Paste เริ่มจากตำแหน่งเดียวกัน
+function rememberBulkTableFocus(el) {
+  if (!el?.dataset?.row || !el?.dataset?.field) return;
+  bulkTableFocus = { row: Number(el.dataset.row), field: el.dataset.field };
+  document.querySelectorAll('#bulkTableBody .cell-active').forEach(cell => cell.classList.remove('cell-active'));
+  el.closest('td')?.classList.add('cell-active');
+}
+
+// คืน element ของช่องในแถว/field ที่ต้องการ โดยไม่ต้องวาดตารางใหม่
+function getBulkCell(rowIndex, field) {
+  return document.querySelector(`#bulkTableBody [data-row="${rowIndex}"][data-field="${field}"]`);
+}
+
+// เขียนค่าจาก state กลับเข้า input/select ของแถวเดียว
+function syncBulkCell(rowIndex, field) {
+  const el = getBulkCell(rowIndex, field);
+  const value = bulkTableState.rows[rowIndex]?.[field] ?? '';
+  if (!el) return;
+  el.value = value;
+}
+
+// Fill Down: เอาค่าจากช่องที่กำลัง focus ไปเติมทุกแถวด้านล่าง
+// ตัวอย่าง: เลือก Condition = A ที่แถว 1 -> Ctrl+Enter -> แถว 2..200 เป็น A
+function fillDownCurrentField() {
+  const { row, field } = bulkTableFocus;
+  const source = bulkTableState.rows[row];
+  if (!source || !BULK_EDITABLE_FIELDS.includes(field)) return showToast('เลือกช่องข้อมูลที่ต้องการ Fill ลงก่อน');
+  const value = source[field];
+  for (let i = row + 1; i < bulkTableState.rows.length; i++) {
+    bulkTableState.rows[i][field] = value;
+    syncBulkCell(i, field);
+  }
+  // ชื่อสินค้าเป็น field ที่มี validation จึงต้อง refresh สีของแถวหลัง Fill ลง
+  if (field === 'item_name') refreshBulkTableValidationRows();
+  showToast(`Fill ${field} ลง ${Math.max(0, bulkTableState.rows.length - row - 1)} แถว`);
+}
+
+// Refresh สถานะ validation ของทุกแถว โดยไม่สร้าง DOM ใหม่
+function refreshBulkTableValidationRows() {
+  bulkTableState.rows.forEach((row, index) => {
+    const rowEl = document.querySelector(`#bulkTableBody tr[data-row="${index}"]`);
+    const errorEl = rowEl?.querySelector(`[data-error-for="${index}"]`);
+    const invalid = !String(row.item_name || '').trim();
+    rowEl?.classList.toggle('bulk-table-row-invalid', invalid);
+    if (errorEl) errorEl.textContent = invalid ? 'ต้องใส่ชื่อสินค้า' : '';
+  });
+}
+
+// สร้าง TSV ของแถวปัจจุบัน เพื่อเอาไปวางใน Excel/Google Sheets ได้ทันที
+function buildBulkRowTSV(rowIndex) {
+  const row = bulkTableState.rows[rowIndex];
+  if (!row) return '';
+  return [row.item_name, row.size, row.condition, row.tier, Number(row.price || 0)].join('\t');
+}
+
+// Copy Row: คัดลอกเฉพาะข้อมูล ไม่คัดลอกรูป เพราะรูปเป็น File object และไม่ควรถูกส่งผ่าน clipboard
+async function copyCurrentBulkRow() {
+  const rowIndex = bulkTableFocus.row;
+  const text = buildBulkRowTSV(rowIndex);
+  if (!text) return showToast('ยังไม่มีแถวให้คัดลอก');
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(`คัดลอกแถว #${rowIndex + 1} แล้ว`);
+  } catch (error) {
+    console.error('Clipboard copy error:', error);
+    showToast('คัดลอกไม่ได้: เบราว์เซอร์ไม่อนุญาต Clipboard');
+  }
+}
+
+// อัปเดต state จาก matrix TSV ที่มาจาก Excel/Google Sheets
+// Mapping: item_name | size | condition | tier | price
+function pasteBulkMatrix(text, startRow, startField) {
+  const matrix = String(text || '').replace(/\r/g, '').trimEnd().split('\n').map(line => line.split('\t'));
+  if (!matrix.length || !matrix[0].length) return false;
+  const startCol = BULK_EDITABLE_FIELDS.indexOf(startField);
+  if (startCol < 0) return false;
+  let changed = 0;
+  matrix.forEach((cells, rOffset) => {
+    const rowIndex = startRow + rOffset;
+    const row = bulkTableState.rows[rowIndex];
+    if (!row) return;
+    cells.forEach((raw, cOffset) => {
+      const field = BULK_EDITABLE_FIELDS[startCol + cOffset];
+      if (!field) return;
+      let value = String(raw ?? '').trim();
+      if (field === 'condition') value = ['A', 'B'].includes(value.toUpperCase()) ? value.toUpperCase() : row.condition;
+      if (field === 'tier') value = ['head', 'normal'].includes(value.toLowerCase()) ? value.toLowerCase() : row.tier;
+      if (field === 'price') value = Number(value.replace(/,/g, '') || 0);
+      row[field] = value;
+      syncBulkCell(rowIndex, field);
+      changed++;
+    });
+  });
+  refreshBulkTableValidationRows();
+  return changed > 0;
+}
+
+// อ่าน Clipboard ด้วยปุ่ม “วางจาก Excel” แล้วเริ่มที่ช่องที่ focus ล่าสุด
+async function pasteFromClipboardButton() {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) return showToast('Clipboard ไม่มีข้อมูล');
+    if (pasteBulkMatrix(text, bulkTableFocus.row, bulkTableFocus.field)) showToast('วางข้อมูลลงตารางแล้ว');
+  } catch (error) {
+    console.error('Clipboard paste error:', error);
+    showToast('วางไม่ได้: ลองกด Ctrl+V ในช่องตารางโดยตรง');
+  }
+}
+
+// ผูก keyboard workflow ของ Bulk Table: Enter/Shift+Enter และ Ctrl+Enter
+function bindBulkTableKeyboard() {
+  const body = $('bulkTableBody');
+  if (!body || body.dataset.keyboardBound === '1') return;
+  body.dataset.keyboardBound = '1';
+
+  body.addEventListener('focusin', event => rememberBulkTableFocus(event.target));
+
+  body.addEventListener('keydown', event => {
+    const el = event.target;
+    if (!el?.dataset?.row || !el?.dataset?.field) return;
+    rememberBulkTableFocus(el);
+    const row = Number(el.dataset.row);
+    const field = el.dataset.field;
+
+    // Ctrl+Enter = Fill ลงเฉพาะ field ที่กำลังแก้
+    if (event.ctrlKey && event.key === 'Enter') {
+      event.preventDefault();
+      fillDownCurrentField();
+      return;
+    }
+
+    // Enter = ไปแถวถัดไปในคอลัมน์เดิม; Shift+Enter = ย้อนกลับหนึ่งแถว
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const nextRow = Math.max(0, Math.min(bulkTableState.rows.length - 1, row + (event.shiftKey ? -1 : 1)));
+      const next = getBulkCell(nextRow, field);
+      if (next) {
+        next.focus();
+        if (typeof next.select === 'function' && next.tagName === 'INPUT') next.select();
+      }
+    }
+  });
+
+  // รองรับ Ctrl+V โดยตรงจาก Excel/Google Sheets แม้ไม่ได้กดปุ่ม “วางจาก Excel”
+  body.addEventListener('paste', event => {
+    const el = event.target;
+    if (!el?.dataset?.row || !el?.dataset?.field) return;
+    const text = event.clipboardData?.getData('text/plain');
+    if (!text || !text.includes('\t')) return; // ถ้าเป็นข้อความธรรมดา ให้ browser paste ตามปกติ
+    event.preventDefault();
+    rememberBulkTableFocus(el);
+    if (pasteBulkMatrix(text, Number(el.dataset.row), el.dataset.field)) showToast('วางข้อมูลจาก Excel แล้ว');
+  });
+}
+
+// ปุ่มเครื่องมือด้านบนของตารางเชื่อมเข้ากับ state ใน browser เท่านั้น
+$('fillDownField')?.addEventListener('click', fillDownCurrentField);
+$('copyCurrentRow')?.addEventListener('click', copyCurrentBulkRow);
+$('pasteClipboard')?.addEventListener('click', pasteFromClipboardButton);
+
+// ตรวจข้อมูลทั้งหมดก่อนเริ่มเขียนลง Supabase
+function validateBulkTable() {
+  const rows = bulkTableState.rows || [];
+  if (!rows.length) return 'ยังไม่มีรายการในตาราง';
+  const empty = rows.findIndex(row => !String(row.item_name || '').trim());
+  if (empty >= 0) return `รายการ #${empty + 1} ยังไม่มีชื่อสินค้า`;
+  const invalidPhotos = rows.findIndex(row => row.files.length < 1 || row.files.length > 2);
+  if (invalidPhotos >= 0) return `รายการ #${invalidPhotos + 1} ต้องมีรูป 1–2 รูป`;
+  return '';
+}
+
+// บันทึก Bulk Table: insert items เป็นชุด แล้ว upload รูปของแต่ละ Item แบบจำกัด concurrency
+$('saveBulkTable')?.addEventListener('click', async () => {
+  // ตรวจ validation ก่อนแตะ Database
+  const validationError = validateBulkTable();
+  if (validationError) return showToast(validationError);
+  // ปิดปุ่มชั่วคราวเพื่อกันการกดซ้ำและสร้าง Item ซ้ำ
+  const button = $('saveBulkTable');
+  button.disabled = true;
+  const rows = bulkTableState.rows;
+  const group = bulkTableState.group;
+  try {
+    // สร้าง payload ของ Items ทั้งกอง; ยังไม่มี image_url เพราะรูปอยู่ใน Storage แยกตาราง
+    const payload = rows.map(row => ({
+      lot_id: bulkTableState.lotId,
+      group_id: group.id,
+      item_name: String(row.item_name).trim(),
+      size: String(row.size || '').trim(),
+      condition: row.condition === 'B' ? 'B' : 'A',
+      tier: row.tier === 'head' ? 'head' : 'normal',
+      cost_price: Number(row.cost || 0),
+      base_price: Number(group.base_price || row.price || 0),
+      current_price: Number(row.price || group.base_price || 0),
+      status: 'available'
+    }));
+    // Insert ครั้งเดียวเพื่อให้ Supabase สร้าง Item IDs กลับมาครบทั้งชุด
+    const { data: inserted, error } = await supabaseClient.from('items').insert(payload).select();
+    if (error) throw error;
+    if (!inserted || inserted.length !== rows.length) throw new Error('Supabase คืนจำนวน Item ไม่ครบ');
+    // จับคู่ Item ที่ Supabase คืนมากับ staging row ตามลำดับ insert
+    // จากนั้น upload รูปของแต่ละ Item พร้อมกันทีละ 4 งาน เพื่อลดการยิง request 200 ชุดพร้อมกัน
+    for (let i = 0; i < rows.length; i += 4) {
+      const chunk = rows.slice(i, i + 4).map((row, offset) => ({ row, item: inserted[i + offset] }));
+      await Promise.all(chunk.map(async ({ row, item }) => uploadItemImages(item.id, row.files)));
+      showToast(`อัปโหลดรูป ${Math.min(i + 4, rows.length)}/${rows.length}`);
+    }
+    // ล้าง staging หลังบันทึกสำเร็จ เพื่อไม่ให้ข้อมูลเก่าค้างอยู่ใน browser
+    bulkTableState = { lotId:null, group:null, rows:[], source:'photo-queue' };
+    $('bulkTablePanel').classList.add('hidden');
+    $('quickEntryPanel').classList.remove('hidden');
+    $('bulkSummary').innerHTML = `<div class="success-box">✓ บันทึกสินค้า ${inserted.length} รายการสำเร็จ</div>`;
+    showBulkStep(3);
+    // refresh รายการและสถิติจาก Supabase เพื่อให้หน้าหลักสะท้อนข้อมูลล่าสุด
+    await loadItems();
+    await loadGroups(group.lot_id);
+  } catch (error) {
+    // ถ้า insert หรือ upload รูปบางส่วนผิดพลาด จะไม่ซ่อน error เพื่อให้นายแก้ไขได้
+    console.error('Bulk Table save error:', error);
+    showToast('บันทึกกองไม่สำเร็จ: ' + error.message);
+  } finally {
+    // เปิดปุ่มกลับไม่ว่าผลลัพธ์จะสำเร็จหรือผิดพลาด
+    button.disabled = false;
+  }
+});
+
+// เตรียมรูปของ Item ที่กำลังกรอกเข้า file input ของ Quick Entry
+async function prepareQueuedItem(index) {
+  // อ่านคู่รูปของ Item ปัจจุบัน
+  const pair = bulkState.photoPairs[index] || [];
+  // สร้าง DataTransfer เพื่อใส่ File object เข้า input type=file
+  const transfer = new DataTransfer();
+  // เพิ่มรูปหลักถ้ามี
+  if (pair[0]) transfer.items.add(pair[0]);
+  // เพิ่มรูปที่สองถ้ามี
+  if (pair[1]) transfer.items.add(pair[1]);
+  // นำ FileList ไปใส่ input
+  $('bulkImages').files = transfer.files;
+  // แสดง preview ของรูปที่เตรียมไว้
+  previewBulkImages();
+  // reset fields ที่ผู้ใช้ต้องกรอก
+  $('bulkName').value = '';
+  $('bulkSize').value = '';
+  $('bulkCondition').value = 'A';
+  $('bulkTier').value = bulkState.group.tier;
+  // ใช้ต้นทุนเฉลี่ยของ Lot
+  $('bulkCost').value = await getLotAvgCost(bulkState.lotId);
+  // ใช้ราคาตั้งต้นของ Group
+  $('bulkPrice').value = bulkState.group.base_price;
+  // อัปเดต progress
+  renderBulkProgress();
+  // focus ชื่อสินค้าเพื่อให้พิมพ์ได้ทันที
+  $('bulkName').focus();
+}
+
+// Excel import: อ่าน Excel + จับรูปตาม photo_count แล้วส่งเข้า Bulk Table ก่อนบันทึก
+$('downloadTemplate')?.addEventListener('click', () => {
+  // Template นี้ใช้เป็นสัญญาระหว่าง Excel กับ Bulk Table: 1 แถว = 1 Item
+  const ws = XLSX.utils.json_to_sheet([
+    {item_name:'Nike Vintage',size:'M',condition:'A',tier:'normal',price:199,photo_count:2},
+    {item_name:'Adidas Tee',size:'L',condition:'A',tier:'normal',price:159,photo_count:1}
+  ]);
+  // สร้าง Workbook ใหม่ใน browser โดยไม่ต้องส่งไฟล์ไป Server
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'items');
+  XLSX.writeFile(wb, 'VIMS2_Items_Template.xlsx');
+});
+
+let importedRows = [];
+
+$('excelInput')?.addEventListener('change', async event => {
+  // อ่านไฟล์ Excel ที่ผู้ใช้เลือกใน browser
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const buffer = await file.arrayBuffer();
+  // XLSX อ่านทั้ง .xlsx/.xls/.csv แล้วคืน worksheet ให้เรา
+  const workbook = XLSX.read(buffer, {type:'array'});
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  // แปลงแถว Excel เป็น object โดยให้ช่องว่างกลายเป็น string ว่าง
+  const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+  // Normalize ชื่อ column ให้ตรงกับ schema ที่ Bulk Table ใช้
+  importedRows = rows.map(row => ({
+    item_name: String(row.item_name || row.name || '').trim(),
+    size: String(row.size || '').trim(),
+    condition: ['A','B'].includes(String(row.condition || '').toUpperCase()) ? String(row.condition).toUpperCase() : 'A',
+    tier: String(row.tier || '').toLowerCase() === 'head' ? 'head' : 'normal',
+    price: Number(row.price || row.sell_price || 0),
+    photo_count: Math.max(1, Math.min(2, Number(row.photo_count || 1)))
+  })).filter(row => row.item_name);
+  // จำกัด Bulk operation ไม่เกิน 200 Item ตาม Requirement ของร้าน
+  if (importedRows.length > 200) return showToast('ครั้งละไม่เกิน 200 รายการ');
+  if (!importedRows.length) return showToast('ไม่พบข้อมูลสินค้าใน Excel');
+  showToast(`อ่าน Excel แล้ว ${importedRows.length} รายการ`);
+});
+
+$('importExcelBtn')?.addEventListener('click', async () => {
+  // Excel ต้องถูกอ่านก่อนจึงจะเริ่ม mapping รูปได้
+  if (!importedRows.length) return showToast('เลือก Excel ก่อน');
+  // เลือก Group ที่ Item ทั้งชุดจะถูกผูกไว้
+  const groupId = $('importGroupSelect').value;
+  if (!groupId) return showToast('เลือกกลุ่มก่อน');
+  const group = allGroups.find(g => g.id === groupId);
+  if (!group) return showToast('ไม่พบกลุ่มที่เลือก');
+  // เรียงรูปด้วย numeric filename เพื่อให้ IMG_9 มาก่อน IMG_10
+  const files = Array.from($('excelImages').files || []).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true, sensitivity:'base'}));
+  // รวมจำนวนรูปที่ Excel ระบุว่าต้องใช้ทั้งหมด
+  const expected = importedRows.reduce((sum, row) => sum + row.photo_count, 0);
+  if (files.length !== expected) return showToast(`จำนวนรูปไม่ตรง: Excel ต้องการ ${expected} รูป แต่เลือก ${files.length} รูป`);
+  // คำนวณต้นทุนเฉลี่ยของ Lot ครั้งเดียวแล้วใช้กับทุกแถว
+  const cost = await getLotAvgCost(group.lot_id);
+  let fileIndex = 0;
+  // แปลง Excel rows + รูป เป็น staging rows ของ Bulk Table
+  const rows = importedRows.map((row, index) => {
+    const itemFiles = files.slice(fileIndex, fileIndex + row.photo_count);
+    fileIndex += row.photo_count;
+    return {
+      index,
+      files: itemFiles,
+      item_name: row.item_name,
+      size: row.size,
+      condition: row.condition,
+      tier: row.tier,
+      price: Number(row.price || group.base_price || 0),
+      cost: Number(cost || 0)
+    };
+  });
+  // เก็บข้อมูลไว้ใน staging และให้ผู้ใช้ตรวจ/แก้ก่อนบันทึกจริง
+  bulkTableState = {lotId:group.lot_id, group, rows, source:'excel'};
+  importedRows = [];
+  $('excelInput').value = '';
+  $('excelImages').value = '';
+  // แสดงตารางตรวจสอบแทนการ insert ทันที เพื่อให้ Excel มี workflow เดียวกับ Photo Queue
+  showBulkTable();
+  showBulkStep(2);
+  showToast(`เตรียมตาราง ${rows.length} รายการแล้ว ตรวจสอบก่อนบันทึกได้เลย`);
+});

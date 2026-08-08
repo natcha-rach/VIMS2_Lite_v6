@@ -1,0 +1,379 @@
+/* ==========================================================
+   BASE — โหลดทุกหน้า
+   ดีไซน์โทเค่นและคอมโพเนนต์ที่ใช้ร่วมกันทุกหน้า
+   คอนเซ็ปต์: "ป้ายราคาเสื้อผ้ามือสอง" — สีดินเผา/หนัง + กระดาษป้ายราคา
+   ========================================================== */
+:root {
+  --color-bg: #F6F3EC;          /* พื้นหลัง กระดาษป้ายราคา */
+  --color-surface: #FFFFFF;
+  --color-ink: #2B2620;         /* ตัวอักษรหลัก */
+  --color-ink-soft: #6B6255;    /* ตัวอักษรรอง */
+  --color-tan: #A9663E;         /* หนัง/แท็ก - accent หลัก */
+  --color-tan-dark: #7C4A2C;
+  --color-denim: #33495C;       /* กางเกงยีนส์ - accent รอง */
+  --color-profit: #4A7C59;      /* กำไร */
+  --color-loss: #B5533C;        /* ขาดทุน */
+  --color-line: #E1D9C8;        /* เส้นขอบ/แบ่ง */
+  --radius: 10px;
+  --shadow-tag: 0 2px 0 var(--color-line), 0 6px 14px rgba(43,38,32,0.06);
+  --font-display: 'Bebas Neue', 'Kanit', sans-serif;
+  --font-body: 'Kanit', 'Work Sans', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: 0.5px;
+  margin: 0 0 4px 0;
+  color: var(--color-ink);
+}
+
+h1 { font-size: 30px; }
+h2 { font-size: 20px; }
+
+a { color: var(--color-denim); }
+
+.hidden { display: none !important; }
+
+.item-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-line);
+}
+
+/* ---------- Layout ---------- */
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 16px 24px;
+}
+
+.topbar {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-line);
+}
+.topbar .subtitle { font-size: 13px; color: var(--color-ink-soft); font-weight: 600; }
+
+/* ---------- Tag-style card (signature element ใช้แทบทุกหน้า) ---------- */
+.tag-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-tag);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.tag-card::before {
+  /* รูเจาะป้ายราคา */
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-line);
+  border-radius: 50%;
+}
+
+/* ---------- Forms ---------- */
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-size: 13px;
+  color: var(--color-ink-soft);
+  margin-bottom: 4px;
+}
+.field input, .field select, .field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: 2px solid var(--color-tan);
+  outline-offset: 1px;
+}
+.field-row { display: flex; gap: 10px; }
+.field-row .field { flex: 1; }
+
+.btn {
+  display: inline-block;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 18px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  text-align: center;
+}
+.btn-primary { background: var(--color-tan); color: #fff; }
+.btn-primary:hover { background: var(--color-tan-dark); }
+.btn-block { width: 100%; }
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--color-line);
+  color: var(--color-ink);
+}
+.btn-danger { background: var(--color-loss); color: #fff; }
+.btn-sm { padding: 8px 12px; font-size: 13px; }
+
+/* ---------- Sidebar nav ---------- */
+/* จอแคบ (<860px): เมนูอยู่เป็นแถบด้านล่างเสมอ (bottom nav bar)
+   จอกว้าง (>=860px): เมนูอยู่ถาวรข้างซ้าย กดย่อเหลือไอคอนได้ */
+#mainWrap {
+  transition: margin-left 0.25s ease;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  width: 230px;
+  background: var(--color-ink);
+  z-index: 260;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 16px rgba(0,0,0,0.2);
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+.sidebar-header .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+.brand-mark {
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-tan);
+  border-radius: 8px;
+  font-size: 15px;
+}
+.brand-text {
+  font-family: var(--font-display);
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: #F6F3EC;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brand-text span { color: var(--color-tan); }
+.nav-collapse {
+  display: none;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 26px;
+  background: rgba(255,255,255,0.08);
+  border: none;
+  border-radius: 6px;
+  color: #C9C0AF;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.15s ease;
+}
+.nav-collapse:hover { background: rgba(255,255,255,0.16); color: #fff; }
+
+.sidebar-links {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.sidebar-links a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #C9C0AF;
+  text-decoration: none;
+  padding: 11px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.sidebar-links a .icon { flex-shrink: 0; width: 18px; text-align: center; font-size: 16px; }
+.sidebar-links a .label { overflow: hidden; text-overflow: ellipsis; }
+.sidebar-links a:hover { background: rgba(255,255,255,0.08); }
+.sidebar-links a.active { background: var(--color-tan); color: #fff; }
+
+.sidebar-footer {
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255,255,255,0.12);
+}
+
+/* ---------- จอแคบ (<860px): เมนูย้ายมาอยู่แถบด้านล่างจอแทน hamburger ---------- */
+@media (max-width: 859.98px) {
+  #mainWrap {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .sidebar {
+    top: auto;
+    bottom: 0; left: 0; right: 0;
+    width: 100%;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.18);
+    border-top: 1px solid rgba(255,255,255,0.12);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .sidebar-header,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .sidebar-links {
+    flex-direction: row;
+    align-items: stretch;
+    padding: 6px 4px;
+    gap: 2px;
+    overflow: visible;
+  }
+  .sidebar-links a {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 2px;
+    text-align: center;
+  }
+  .sidebar-links a .icon { width: auto; font-size: 20px; }
+  .sidebar-links a .label {
+    font-size: 10px;
+    white-space: normal;
+    line-height: 1.2;
+  }
+}
+
+/* ---------- จอกว้าง (แท็บเล็ต/เดสก์ท็อป): เมนูข้างอยู่ถาวร ย่อเหลือไอคอนได้ ---------- */
+@media (min-width: 860px) {
+  .nav-collapse { display: flex; }
+
+  #mainWrap { margin-left: 230px; }
+  .topbar { padding-left: 20px; }
+
+  body.sidebar-collapsed .sidebar { width: 72px; }
+  body.sidebar-collapsed #mainWrap { margin-left: 72px; }
+  body.sidebar-collapsed .sidebar-header { justify-content: center; }
+  body.sidebar-collapsed .brand-text,
+  body.sidebar-collapsed .sidebar-links a .label { display: none; }
+  body.sidebar-collapsed .sidebar-links a { justify-content: center; }
+  body.sidebar-collapsed .nav-collapse { transform: rotate(180deg); }
+}
+
+/* ---------- Stat card / grid (ใช้ในหน้าภาพรวม + รายงาน) ---------- */
+.stat-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.stat-card .label {
+  font-size: 12px;
+  color: var(--color-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.stat-card .value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  margin-top: 2px;
+}
+.stat-card .value.profit { color: var(--color-profit); }
+.stat-card .value.loss { color: var(--color-loss); }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* ---------- ตาราง (ใช้ในหน้าภาพรวม + รายงาน) ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--color-line); }
+th { color: var(--color-ink-soft); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+td.profit { color: var(--color-profit); }
+td.loss { color: var(--color-loss); }
+
+/* ---------- ใช้ร่วมกันหลายหน้า ---------- */
+.empty-state {
+  text-align: center;
+  color: var(--color-ink-soft);
+  padding: 40px 20px;
+  font-size: 14px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-ink);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* ---------- Responsive: ยกกล่องข้อความแจ้งเตือนขึ้นให้พ้นแถบเมนูด้านล่าง ---------- */
+@media (max-width: 859.98px) {
+  .toast {
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- Responsive: ฟอร์มบนจอแคบมากไม่ให้ช่องอินพุตบีบเกินไป ---------- */
+@media (max-width: 380px) {
+  .field-row { flex-direction: column; gap: 0; }
+}
+
+/* ---------- Responsive: ตารางเลื่อนแนวนอนแทนการบีบอัดจนอ่านไม่ออก ---------- */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll table { min-width: 480px; }
+
+/* ---------- Responsive: ใช้พื้นที่จอกว้างขึ้นแทนการค้างที่ความกว้างมือถือ ---------- */
+@media (min-width: 640px) {
+  .stat-grid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (min-width: 860px) {
+  .page { max-width: 900px; padding: 32px 32px 44px; }
+}
+@media (min-width: 1200px) {
+  .page { max-width: 1080px; }
+}

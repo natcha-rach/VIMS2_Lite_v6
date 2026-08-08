@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ขายของ | ระบบร้านเสื้อมือสอง</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Kanit:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/sell.css" />
+  </head>
+  <body>
+    <nav id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="brand-mark">👕</span
+          ><span class="brand-text">Bubbles <span>Gumps</span></span>
+        </div>
+        <button
+          id="navCollapse"
+          class="nav-collapse"
+          aria-label="ย่อ/ขยายเมนู"
+          title="ย่อ/ขยายเมนู"
+        >
+          ‹
+        </button>
+      </div>
+      <div class="sidebar-links">
+        <a href="index.html" title="ภาพรวม"
+          ><span class="icon">📊</span><span class="label">ภาพรวม</span></a
+        >
+        <a href="lots.html" title="ล็อต"
+          ><span class="icon">📦</span><span class="label">ล็อต</span></a
+        >
+        <a href="items.html" title="สินค้า"
+          ><span class="icon">👕</span><span class="label">สินค้า</span></a
+        >
+        <a href="sell.html" title="ขายของ"
+          ><span class="icon">💰</span><span class="label">ขายของ</span></a
+        >
+        <a href="reports.html" title="รายงาน"
+          ><span class="icon">📅</span><span class="label">รายงาน</span></a
+        >
+        <a href="accounting.html" title="บัญชี"
+          ><span class="icon">🧾</span><span class="label">บัญชี</span></a
+        >
+      </div>
+    </nav>
+
+    <div id="mainWrap">
+      <div class="topbar">
+        <div class="subtitle">ขายของ · แตะที่ตัวเสื้อเพื่อขาย</div>
+      </div>
+
+      <div class="page">
+        <div class="field" style="margin-bottom: 16px">
+          <input type="text" id="searchBox" placeholder="ค้นหาชื่อเสื้อ..." />
+        </div>
+        <div class="item-grid" id="sellGrid">
+          <div class="empty-state">กำลังโหลด...</div>
+        </div>
+      </div>
+
+      <!-- Modal ยืนยันการขาย -->
+      <div class="modal-backdrop hidden" id="sellModal">
+        <div class="modal-sheet">
+          <h2 id="modalItemName">-</h2>
+          <p
+            style="color: var(--color-ink-soft); margin-top: 0; font-size: 13px"
+            id="modalItemMeta"
+          ></p>
+
+          <form id="sellForm">
+            <input type="hidden" id="modalItemId" />
+            <div class="field">
+              <label for="salePrice">ราคาที่ขายได้จริง (บาท)</label>
+              <input
+                type="number"
+                id="salePrice"
+                step="0.01"
+                min="0"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="paymentMethod">วิธีจ่ายเงิน</label>
+              <select id="paymentMethod" required>
+                <option value="cash">เงินสด</option>
+                <option value="transfer">เงินโอน</option>
+                <option value="government">โครงการรัฐ</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="channel">ช่องทางขาย</label>
+              <select id="channel">
+                <option value="street_market">ถนนคนเดิน</option>
+                <option value="facebook">Facebook</option>
+                <option value="instagram">Instagram</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <button
+                type="button"
+                class="btn btn-ghost"
+                id="cancelSell"
+                style="flex: 1"
+              >
+                ยกเลิก
+              </button>
+              <button type="submit" class="btn btn-primary" style="flex: 2">
+                ยืนยันการขาย
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/js/supabaseClient.js"></script>
+    <script src="assets/js/nav.js"></script>
+    <script src="assets/js/sell.js"></script>
+  </body>
+</html>

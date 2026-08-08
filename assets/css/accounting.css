@@ -1,0 +1,100 @@
+/* ==========================================================
+   ACCOUNTING (accounting.html) — บัญชีร้านแบบครบวงจร
+   ========================================================== */
+
+.cashflow-note {
+  font-size: 12px;
+  color: var(--color-ink-soft);
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.cashflow-value {
+  font-family: var(--font-display);
+  font-size: 20px;
+  border-top: 1px solid var(--color-line);
+  padding-top: 10px;
+}
+.cashflow-value .profit { color: var(--color-profit); }
+.cashflow-value .loss { color: var(--color-loss); }
+#accCashflow.profit { color: var(--color-profit); }
+#accCashflow.loss { color: var(--color-loss); }
+
+.expense-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.expense-category { font-weight: 600; }
+.expense-meta { font-size: 12px; color: var(--color-ink-soft); }
+.expense-actions { text-align: right; }
+.expense-amount {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--color-loss);
+  margin-bottom: 6px;
+}
+
+.ledger-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+}
+
+/* ---------- ระบบแบ่งถังเงิน ---------- */
+.bucket-input-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.bucket-input-row:last-of-type { border-bottom: none; }
+.bucket-input-row label { font-size: 14px; }
+.pct-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.pct-input input {
+  width: 64px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  text-align: right;
+  font-family: var(--font-body);
+}
+.pct-input span { color: var(--color-ink-soft); font-size: 13px; }
+
+.pct-warning {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #F0E4DE;
+  color: var(--color-loss);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.bucket-results {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bucket-result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--color-bg);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.bucket-result-row strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--color-tan-dark);
+}

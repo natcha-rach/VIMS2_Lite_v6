@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>จัดการล็อต | ระบบร้านเสื้อมือสอง</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="assets/css/base.css" />
+    <link rel="stylesheet" href="assets/css/lots.css" />
+  </head>
+  <body>
+    <nav id="sidebar" class="sidebar">
+      <div class="sidebar-header"><div class="brand"><span class="brand-mark">👕</span><span class="brand-text">Bubbles <span>Gumps</span></span></div><button id="navCollapse" class="nav-collapse" aria-label="ย่อ/ขยายเมนู">‹</button></div>
+      <div class="sidebar-links">
+        <a href="index.html" title="ภาพรวม"><span class="icon">📊</span><span class="label">ภาพรวม</span></a>
+        <a href="lots.html" title="ล็อต"><span class="icon">📦</span><span class="label">ล็อต</span></a>
+        <a href="items.html" title="สินค้า"><span class="icon">👕</span><span class="label">สินค้า</span></a>
+        <a href="sell.html" title="ขายของ"><span class="icon">💰</span><span class="label">ขายของ</span></a>
+        <a href="reports.html" title="รายงาน"><span class="icon">📅</span><span class="label">รายงาน</span></a>
+        <a href="accounting.html" title="บัญชี"><span class="icon">🧾</span><span class="label">บัญชี</span></a>
+      </div>
+    </nav>
+
+    <div id="mainWrap">
+      <div class="topbar"><div class="subtitle">จัดการล็อต / คัดสินค้า</div></div>
+      <div class="page lot-page">
+        <div class="page-head"><div><h1>ล็อตสินค้า</h1><p class="muted">1 Lot = 1 ครั้งที่รับเสื้อเข้ามา และแต่ละ Lot มีวิธีคัดของของตัวเอง</p></div><a href="items.html" class="btn btn-primary">ไปหน้าสินค้า</a></div>
+
+        <div class="tag-card">
+          <h2 id="lotFormTitle">เพิ่มล็อตใหม่</h2>
+          <p class="muted">ต้นทุนเฉลี่ยต่อชิ้นจะถูกใช้เป็นต้นทุนตั้งต้นของสินค้าใน Lot นี้</p>
+          <form id="lotForm">
+            <div class="field"><label for="lotName">ชื่อ/รหัสล็อต</label><input type="text" id="lotName" placeholder="เช่น Vintage กระสอบ 08/08/69" required /></div>
+            <div class="field-row"><div class="field"><label for="purchaseDate">วันที่ซื้อ</label><input type="date" id="purchaseDate" required /></div><div class="field"><label for="source">แหล่งที่มา</label><input type="text" id="source" placeholder="ชื่อร้าน/ตลาด" /></div></div>
+            <div class="field-row"><div class="field"><label for="totalCost">ต้นทุนรวมทั้งล็อต (บาท)</label><input type="number" id="totalCost" step="0.01" min="0" required /></div><div class="field"><label for="totalItems">จำนวนชิ้นทั้งหมด</label><input type="number" id="totalItems" min="0" required /></div></div>
+            <div id="avgCostPreview" class="avg-cost-preview">ต้นทุนเฉลี่ย: - / ชิ้น</div>
+            <div class="field"><label for="note">หมายเหตุ</label><textarea id="note" rows="2" placeholder="เช่น กระสอบญี่ปุ่น 200 ตัว"></textarea></div>
+            <div class="field-row"><button type="button" class="btn btn-ghost hidden" id="cancelLotEdit">ยกเลิกแก้ไข</button><button type="submit" class="btn btn-primary" id="lotSubmitBtn">บันทึกล๊อต</button></div>
+          </form>
+        </div>
+
+        <div class="section-head"><div><h2>ล็อตทั้งหมด</h2><p class="muted">เปิดแต่ละ Lot เพื่อจัดกลุ่มคัดสินค้า เช่น ฿40–60, ฿100, งานหัว หรือกลุ่มเฉพาะของ Lot นั้น</p></div></div>
+        <div id="lotList"><div class="empty-state">กำลังโหลด...</div></div>
+      </div>
+    </div>
+
+    <div id="groupModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close-group></div>
+      <div class="modal-panel">
+        <div class="modal-head"><div><h2 id="groupModalTitle">จัดกลุ่มคัดสินค้า</h2><p id="groupModalMeta" class="muted"></p></div><button class="modal-close" data-close-group>×</button></div>
+        <div class="group-summary" id="groupSummary"></div>
+        <form id="groupForm" class="group-form">
+          <input type="hidden" id="groupId" />
+          <div class="field"><label for="groupName">ชื่อกลุ่ม</label><input id="groupName" required placeholder="เช่น ฿40–60 / งานหัว / เสื้อยืด" /></div>
+          <div class="field-row"><div class="field"><label for="groupBasePrice">ราคาตั้งต้น</label><input id="groupBasePrice" type="number" min="0" step="0.01" required /></div><div class="field"><label for="groupTier">Tier</label><select id="groupTier"><option value="normal">ปกติ</option><option value="head">งานหัว / Premium</option></select></div></div>
+          <div class="field"><label for="groupSortOrder">ลำดับการแสดงผล</label><input id="groupSortOrder" type="number" min="0" step="1" value="0" /></div>
+          <div class="field-row"><button type="button" class="btn btn-ghost hidden" id="cancelGroupEdit">ยกเลิกแก้ไข</button><button class="btn btn-primary" type="submit" id="groupSubmitBtn">เพิ่มกลุ่ม</button></div>
+        </form>
+        <div class="group-list-wrap"><div class="group-list-title">กลุ่มใน Lot นี้</div><div id="groupList"><div class="empty-state">กำลังโหลด...</div></div></div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="assets/js/supabaseClient.js"></script>
+    <script src="assets/js/nav.js"></script>
+    <script src="assets/js/lots.js"></script>
+  </body>
+</html>

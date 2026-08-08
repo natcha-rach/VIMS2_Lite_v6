@@ -1,0 +1,42 @@
+/* ==========================================================
+   REPORTS (reports.html) — สรุปยอดรายวัน/เดือน/ปี
+   ========================================================== */
+
+.period-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.period-tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink-soft);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+.period-tab.active {
+  background: var(--color-tan);
+  border-color: var(--color-tan);
+  color: #fff;
+}
+
+.period-picker { margin-bottom: 16px; }
+.period-picker .field { margin-bottom: 0; }
+
+.sale-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-line);
+  font-size: 13px;
+}
+.sale-row:last-child { border-bottom: none; }
+.sale-row .sale-name { font-weight: 600; }
+.sale-row .sale-meta { color: var(--color-ink-soft); font-size: 12px; }
+.sale-row .sale-price { font-family: var(--font-display); font-size: 16px; color: var(--color-tan-dark); }
