@@ -40,3 +40,5 @@
 .sale-row .sale-name { font-weight: 600; }
 .sale-row .sale-meta { color: var(--color-ink-soft); font-size: 12px; }
 .sale-row .sale-price { font-family: var(--font-display); font-size: 16px; color: var(--color-tan-dark); }
+
+.weekend-report-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.weekend-report-card{padding:14px;border:1px solid var(--color-line);border-radius:12px;background:#fafafa}.weekend-report-card b{display:block;font-size:22px}.weekend-report-card span,.weekend-report-card small{display:block;color:var(--color-ink-soft);font-size:12px}@media(max-width:620px){.weekend-report-grid{grid-template-columns:1fr}}

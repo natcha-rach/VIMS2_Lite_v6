@@ -131,7 +131,25 @@ async function loadItems(){
   const status=$('filterStatus').value,q=($('searchBox').value||'').trim(); let query=supabaseClient.from('items').select('*, lots(lot_name), lot_groups(group_name)').order('created_at',{ascending:false}); if(status!=='all') query=query.eq('status',status); if(q) query=query.ilike('item_name',`%${q}%`);
   const {data,error}=await query; if(error){$('itemList').innerHTML='<div class="empty-state">โหลดข้อมูลไม่สำเร็จ</div>';return;} itemsCache=data||[]; renderItems(); updateQuickStats();
 }
-async function renderItems(){ if(!itemsCache.length){$('itemList').innerHTML='<div class="empty-state">ไม่มีสินค้าในรายการนี้</div>';return;} const ids=itemsCache.map(i=>i.id); const {data:imgs}=await supabaseClient.from('item_images').select('*').in('item_id',ids).order('sort_order'); const byItem={}; (imgs||[]).forEach(x=>(byItem[x.item_id]??=[]).push(x)); $('itemList').innerHTML=itemsCache.map(i=>{const im=(byItem[i.id]||[])[0]; return `<div class="stock-row"><div class="thumb">${im?`<img src="${im.image_url}" alt="">`:'👕'}</div><div class="stock-main"><b>${escapeHtml(i.item_name)}</b><span>${escapeHtml(i.size||'-')} · ${i.condition} · ${i.tier==='head'?'งานหัว':'ปกติ'} · ${escapeHtml(i.lots?.lot_name||'-')}</span></div><div class="stock-price"><small>ต้นทุน ${formatBaht(i.cost_price)}</small><b>${formatBaht(i.current_price)}</b></div><span class="badge ${i.status}">${i.status==='available'?'พร้อมขาย':i.status==='sold'?'ขายแล้ว':'เสีย'}</span></div>`;}).join(''); }
+async function renderItems(){
+  // โหลดรูปทั้งหมดของรายการที่กำลังแสดง เพื่อให้ card รู้ว่ามีรูป 1 หรือ 2 รูป
+  if(!itemsCache.length){$('itemList').innerHTML='<div class="empty-state">ไม่มีสินค้าในรายการนี้</div>';return;}
+  const ids=itemsCache.map(i=>i.id);
+  const {data:imgs}=await supabaseClient.from('item_images').select('*').in('item_id',ids).order('sort_order');
+  const byItem={}; (imgs||[]).forEach(x=>(byItem[x.item_id]??=[]).push(x));
+  // สร้าง Stock Card; ปุ่มแก้ไขจะส่ง Item ID กลับเข้า editItem() ซึ่งเป็นจุดเชื่อมกับ Edit Modal
+  $('itemList').innerHTML=itemsCache.map(i=>{
+    const itemImages=byItem[i.id]||[]; const im=itemImages[0];
+    return `<div class="stock-row">
+      <div class="thumb">${im?`<img src="${im.image_url}" alt="">`:'👕'}</div>
+      <div class="stock-main"><b>${escapeHtml(i.item_name)}</b><span>${escapeHtml(i.size||'-')} · ${i.condition} · ${i.tier==='head'?'งานหัว':'ปกติ'} · ${escapeHtml(i.lots?.lot_name||'-')}</span></div>
+      <div class="stock-price"><small>ต้นทุน ${formatBaht(i.cost_price)}</small><b>${formatBaht(i.current_price)}</b></div>
+      <span class="badge ${i.status}">${i.status==='available'?'พร้อมขาย':i.status==='sold'?'ขายแล้ว':'เสีย'}</span>
+      <div class="stock-actions"><button class="btn btn-ghost btn-sm" data-edit-item="${i.id}">แก้ไข</button></div>
+    </div>`;
+  }).join('');
+  $('itemList').querySelectorAll('[data-edit-item]').forEach(btn=>btn.onclick=()=>openEditItem(btn.dataset.editItem));
+}
 async function updateQuickStats(){ const {data,error}=await supabaseClient.from('items').select('status,cost_price'); if(error)return; const rows=data||[]; const available=rows.filter(x=>x.status==='available'); const sold=rows.filter(x=>x.status==='sold'); const value=available.reduce((s,x)=>s+Number(x.cost_price||0),0); $('quickStats').innerHTML=`<div><span>สินค้าทั้งหมด</span><b>${rows.length}</b></div><div><span>พร้อมขาย</span><b>${available.length}</b></div><div><span>ขายแล้ว</span><b>${sold.length}</b></div><div><span>ต้นทุนคงเหลือ</span><b>${formatBaht(value)}</b></div>`; }
 function escapeHtml(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function showToast(msg){const t=$('toast');if(!t)return;t.textContent=msg;t.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),2600);}
@@ -691,4 +709,154 @@ $('importExcelBtn')?.addEventListener('click', async () => {
   showBulkTable();
   showBulkStep(2);
   showToast(`เตรียมตาราง ${rows.length} รายการแล้ว ตรวจสอบก่อนบันทึกได้เลย`);
+});
+
+
+// ============================================================
+// ITEM EDIT — แก้ไขสินค้า + รูป + Group + ประวัติ โดยไม่ลบ Sale History
+// ============================================================
+let editItemImages = [];
+
+// เปิด Edit Modal จาก Item ID ที่มาจาก Stock Card
+async function openEditItem(itemId) {
+  // หา Item จาก cache ก่อน เพื่อลด query ที่ไม่จำเป็น
+  const item = itemsCache.find(x => x.id === itemId);
+  if (!item) return showToast('ไม่พบสินค้า');
+  editingItemId = itemId;
+  $('editItemId').value = itemId;
+  $('editItemMeta').textContent = `${item.item_name} · ${item.status === 'sold' ? 'ขายแล้ว' : item.status === 'damaged' ? 'เสีย' : 'พร้อมขาย'}`;
+  $('editItemName').value = item.item_name || '';
+  $('editSize').value = item.size || '';
+  $('editCondition').value = item.condition || 'A';
+  $('editTier').value = item.tier || 'normal';
+  $('editStatus').value = item.status || 'available';
+  $('editBasePrice').value = Number(item.base_price || 0);
+  $('editCurrentPrice').value = Number(item.current_price || 0);
+  $('editCostPrice').value = Number(item.cost_price || 0);
+  $('editLotName').value = item.lots?.lot_name || '-';
+  $('editImages').value = '';
+
+  // Group ต้องเป็น Group ของ Lot เดิมเท่านั้น เพื่อไม่ทำให้ relation Lot/Group ผิด
+  const { data: groups, error: groupError } = await supabaseClient.from('lot_groups').select('*').eq('lot_id', item.lot_id).order('sort_order');
+  if (groupError) return showToast('โหลดกลุ่มไม่สำเร็จ: ' + groupError.message);
+  $('editGroup').innerHTML = '<option value="">ไม่ระบุกลุ่ม</option>' + (groups || []).map(g => `<option value="${g.id}">${escapeHtml(g.group_name)} · ${formatBaht(g.base_price)}</option>`).join('');
+  $('editGroup').value = item.group_id || '';
+
+  // โหลดรูปปัจจุบันเพื่อให้ผู้ใช้เห็นว่ามีรูป 1 หรือ 2 รูป
+  const { data: images, error: imageError } = await supabaseClient.from('item_images').select('*').eq('item_id', itemId).order('sort_order');
+  if (imageError) return showToast('โหลดรูปไม่สำเร็จ: ' + imageError.message);
+  editItemImages = images || [];
+  renderEditCurrentImages();
+
+  // Sold Item ยังแก้ข้อมูลสินค้าได้ แต่ห้ามเปลี่ยนสถานะกลับเป็น Available/Damaged
+  $('editStatus').disabled = item.status === 'sold';
+  $('editItemWarning').textContent = item.status === 'sold'
+    ? 'สินค้านี้ขายแล้ว: แก้ชื่อ/รูป/ราคา/รายละเอียดได้ แต่ระบบจะไม่อนุญาตให้เปลี่ยนสถานะกลับเป็นพร้อมขายหรือเสีย เพื่อรักษาประวัติการขาย'
+    : '';
+
+  await loadItemHistory(itemId);
+  $('editItemModal').classList.remove('hidden');
+}
+
+// แสดงรูปเดิมใน Edit Modal; รูปใหม่จะยังไม่ถูก upload จนกด Save
+function renderEditCurrentImages() {
+  if (!editItemImages.length) {
+    $('editCurrentImages').innerHTML = '<div class="edit-image-empty">ยังไม่มีรูปสินค้า</div>';
+    return;
+  }
+  $('editCurrentImages').innerHTML = editItemImages.map((img, index) => `<div class="edit-image-card"><img src="${img.image_url}" alt=""><span>รูปที่ ${index + 1}</span></div>`).join('');
+}
+
+// โหลดประวัติการแก้ไขจาก Supabase; ใช้สำหรับ audit trail ของ Item แต่ละตัว
+async function loadItemHistory(itemId) {
+  const { data, error } = await supabaseClient.from('item_change_history').select('*').eq('item_id', itemId).order('created_at', {ascending:false}).limit(30);
+  if (error) {
+    $('itemHistoryList').innerHTML = '<div class="empty-state">ยังไม่ได้รัน migration_v7.sql</div>';
+    return;
+  }
+  if (!data?.length) {
+    $('itemHistoryList').innerHTML = '<div class="empty-state">ยังไม่มีประวัติการแก้ไข</div>';
+    return;
+  }
+  $('itemHistoryList').innerHTML = data.map(entry => {
+    const changes = entry.changed_fields || {};
+    const labels = {item_name:'ชื่อสินค้า',size:'Size',condition:'สภาพ',tier:'Tier',status:'สถานะ',group_id:'กลุ่ม',cost_price:'ต้นทุน',base_price:'ราคาตั้งต้น',current_price:'ราคาปัจจุบัน'};
+    const rows = Object.entries(changes).map(([field, value]) => {
+      const oldValue = value?.old ?? '-'; const newValue = value?.new ?? '-';
+      return `<div class="history-change"><b>${labels[field] || field}</b><span>${escapeHtml(String(oldValue))} → <strong>${escapeHtml(String(newValue))}</strong></span></div>`;
+    }).join('');
+    return `<div class="history-row"><div class="history-row-head"><span>${entry.action === 'image_replace' ? '📷 เปลี่ยนรูป' : '✏️ แก้ข้อมูล'}</span><span>${new Date(entry.created_at).toLocaleString('th-TH')}</span></div><div class="history-changes">${rows || '<div>มีการเปลี่ยนแปลง</div>'}</div></div>`;
+  }).join('');
+}
+
+function closeEditItem() {
+  $('editItemModal').classList.add('hidden');
+  editingItemId = null;
+  editItemImages = [];
+  $('editImages').value = '';
+}
+$('closeEditItem')?.addEventListener('click', closeEditItem);
+$('cancelEditItem')?.addEventListener('click', closeEditItem);
+$('editItemModal')?.addEventListener('click', event => { if (event.target === $('editItemModal')) closeEditItem(); });
+
+// Preview รูปใหม่ก่อน Save; ไม่แตะ Storage จนกว่าจะ submit form
+$('editImages')?.addEventListener('change', event => {
+  const files = Array.from(event.target.files || []).slice(0,2);
+  if (event.target.files.length > 2) showToast('ระบบใช้รูปใหม่แค่ 2 รูปแรก');
+  const previews = files.map((file, index) => `<div class="edit-image-card"><img src="${URL.createObjectURL(file)}" alt=""><span>รูปใหม่ ${index + 1}</span></div>`).join('');
+  $('editCurrentImages').innerHTML = previews || editItemImages.map((img, index) => `<div class="edit-image-card"><img src="${img.image_url}" alt=""><span>รูปที่ ${index + 1}</span></div>`).join('');
+});
+
+function changedFieldMap(before, after) {
+  const fields = ['item_name','size','condition','tier','status','group_id','cost_price','base_price','current_price'];
+  const result = {};
+  fields.forEach(field => {
+    const oldValue = before[field] ?? null; const newValue = after[field] ?? null;
+    if (String(oldValue) !== String(newValue)) result[field] = {old: oldValue, new: newValue};
+  });
+  return result;
+}
+
+// Save: เรียก RPC เพื่อ update Item + history ใน transaction เดียว จากนั้นค่อยจัดการรูปใน Storage
+$('editItemForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const item = itemsCache.find(x => x.id === editingItemId);
+  if (!item) return showToast('ไม่พบสินค้า');
+  const saveButton = $('saveEditItem'); saveButton.disabled = true;
+  try {
+    const next = {
+      item_name: $('editItemName').value.trim(), size: $('editSize').value.trim(), condition: $('editCondition').value,
+      tier: $('editTier').value, status: $('editStatus').value, group_id: $('editGroup').value || null,
+      cost_price: Number($('editCostPrice').value || 0), base_price: Number($('editBasePrice').value || 0), current_price: Number($('editCurrentPrice').value || 0)
+    };
+    if (!next.item_name) return showToast('กรุณาใส่ชื่อสินค้า');
+    if (next.status !== 'sold' && item.status === 'sold') return showToast('สินค้าที่ขายแล้วเปลี่ยนกลับไม่ได้');
+    const changed = changedFieldMap(item, next);
+    const { error } = await supabaseClient.rpc('update_item_with_history', {
+      p_item_id: editingItemId, p_item_name: next.item_name, p_size: next.size, p_condition: next.condition, p_tier: next.tier,
+      p_status: next.status, p_group_id: next.group_id, p_cost_price: next.cost_price, p_base_price: next.base_price,
+      p_current_price: next.current_price, p_changed_fields: changed
+    });
+    if (error) throw error;
+
+    // ถ้าเลือกไฟล์ใหม่: ลบรายการรูปเดิม + ลบไฟล์เดิมใน Storage + upload รูปใหม่ 1–2 รูป
+    const newFiles = Array.from($('editImages').files || []).slice(0,2);
+    if (newFiles.length) {
+      for (const oldImage of editItemImages) {
+        if (oldImage.storage_path) await supabaseClient.storage.from('item-images').remove([oldImage.storage_path]);
+      }
+      await supabaseClient.from('item_images').delete().eq('item_id', editingItemId);
+      await uploadItemImages(editingItemId, newFiles);
+      await supabaseClient.from('item_change_history').insert({item_id: editingItemId, action:'image_replace', changed_fields:{old_count:editItemImages.length,new_count:newFiles.length}});
+    }
+
+    showToast('บันทึกการแก้ไขแล้ว');
+    closeEditItem();
+    await loadItems();
+  } catch (error) {
+    console.error('Edit Item error:', error);
+    showToast('แก้ไขไม่สำเร็จ: ' + error.message);
+  } finally {
+    saveButton.disabled = false;
+  }
 });

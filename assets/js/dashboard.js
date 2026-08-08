@@ -27,19 +27,20 @@ function sum(arr, fn) { return arr.reduce((a,x) => a + Number(fn(x) || 0), 0); }
 function percent(a,b) { return b ? (a/b)*100 : 0; }
 
 async function fetchDashboardData() {
-  const [lotsR, itemsR, salesR, expensesR] = await Promise.all([
+  const [lotsR, groupsR, itemsR, salesR, expensesR] = await Promise.all([
     supabaseClient.from("lots").select("id,lot_name,purchase_date,total_cost,total_items"),
+    supabaseClient.from("lot_groups").select("id,lot_id,group_name,base_price,tier"),
     supabaseClient.from("items").select("id,lot_id,item_name,size,condition,tier,cost_price,current_price,status,created_at,sold_at,group_id"),
     supabaseClient.from("sales").select("id,item_id,sale_date,channel,sale_price,cost_price,payment_method"),
     supabaseClient.from("expenses").select("id,expense_date,amount,category")
   ]);
-  const err = lotsR.error || itemsR.error || salesR.error || expensesR.error;
+  const err = lotsR.error || groupsR.error || itemsR.error || salesR.error || expensesR.error;
   if (err) throw err;
-  return { lots: lotsR.data || [], items: itemsR.data || [], sales: salesR.data || [], expenses: expensesR.data || [] };
+  return { lots: lotsR.data || [], groups: groupsR.data || [], items: itemsR.data || [], sales: salesR.data || [], expenses: expensesR.data || [] };
 }
 
 function renderDashboard(data, range) {
-  const { lots, items, sales, expenses } = data;
+  const { lots, groups, items, sales, expenses } = data;
   const periodSales = sales.filter(s => inRange(s.sale_date, range));
   const periodExpenses = expenses.filter(e => inRange(`${e.expense_date}T23:59:59`, range));
   const revenue = sum(periodSales, s => s.sale_price);
@@ -97,7 +98,29 @@ function renderDashboard(data, range) {
 
   const today = rangeFromPreset("today"); const todaySales = sales.filter(s=>inRange(s.sale_date,today)); const tp={cash:0,transfer:0,government:0}; todaySales.forEach(s=>tp[s.payment_method]=(tp[s.payment_method]||0)+Number(s.sale_price||0));
   $("todayPayments").innerHTML = ["cash","transfer","government"].map(k=>`<div><span>${PAYMENT_LABELS[k]||k}</span><b>${formatBaht(tp[k])}</b></div>`).join("");
+
+  // Weekend summary: แยกเฉพาะยอดจากถนนคนเดิน และแบ่งตามวันเสาร์/อาทิตย์
+  const weekend = { 6:{label:"เสาร์",count:0,revenue:0,profit:0}, 0:{label:"อาทิตย์",count:0,revenue:0,profit:0} };
+  periodSales.filter(s => (s.channel || "") === "street_market").forEach(s => {
+    const day = new Date(s.sale_date).getDay();
+    if (!weekend[day]) return;
+    weekend[day].count += 1; weekend[day].revenue += Number(s.sale_price || 0); weekend[day].profit += Number(s.sale_price || 0) - Number(s.cost_price || 0);
+  });
+  $("weekendSummary").innerHTML = [6,0].map(day => { const v=weekend[day]; return `<div class="weekend-card"><span>${v.label}</span><b>${formatBaht(v.revenue)}</b><small>${v.count} ชิ้น · กำไร ${formatBaht(v.profit)}</small></div>`; }).join("");
+
+  // Top profit items: ใช้ราคาขายจริงลบต้นทุนจริง ไม่ใช้ราคาตั้งต้น
+  const itemSales = {};
+  periodSales.forEach(s => { const item = itemById[s.item_id]; if (!item) return; const profit = Number(s.sale_price||0)-Number(s.cost_price||0); itemSales[s.item_id] ||= {item,count:0,revenue:0,profit:0}; itemSales[s.item_id].count++; itemSales[s.item_id].revenue += Number(s.sale_price||0); itemSales[s.item_id].profit += profit; });
+  const topProfit = Object.values(itemSales).sort((a,b)=>b.profit-a.profit).slice(0,10);
+  $("topProfitItems").innerHTML = topProfit.length ? topProfit.map((x,i)=>`<div class="rank-item"><span class="rank-no">${i+1}</span><div><b>${escapeHtml(x.item.item_name)}</b><small>${escapeHtml(x.item.size||"-")} · ${x.item.condition} · ${x.item.tier==='head'?"งานหัว":"ปกติ"}</small></div><div class="rank-value">${formatBaht(x.profit)}<small>${x.count} ชิ้น</small></div></div>`).join("") : `<div class="empty-state">ยังไม่มีข้อมูลการขาย</div>`;
+
+  // Lot recovery: รายได้สะสมในช่วงที่เลือกเทียบกับต้นทุน Lot ทั้งก้อน
+  const lotRecovery = {}; lots.forEach(l => lotRecovery[l.id] = {lot:l,revenue:0,profit:0});
+  periodSales.forEach(s => { const item=itemById[s.item_id]; const row=item && lotRecovery[item.lot_id]; if(!row)return; row.revenue += Number(s.sale_price||0); row.profit += Number(s.sale_price||0)-Number(s.cost_price||0); });
+  const recoveryRows = Object.values(lotRecovery).filter(x=>x.revenue>0).sort((a,b)=>b.revenue-a.revenue).slice(0,12);
+  $("lotRecovery").innerHTML = recoveryRows.length ? recoveryRows.map(x=>{ const pct=percent(x.revenue,x.lot.total_cost); return `<div class="lot-recovery-row"><div class="lot-meta"><b>${escapeHtml(x.lot.lot_name)}</b><small>ต้นทุน ${formatBaht(x.lot.total_cost)} · กำไร ${formatBaht(x.profit)}</small></div><div class="recovery-track"><div class="recovery-fill" style="width:${Math.min(100,pct).toFixed(1)}%"></div></div><div class="recovery-value">${pct.toFixed(0)}%<small>คืนทุน</small></div></div>`; }).join("") : `<div class="empty-state">ยังไม่มี Lot ที่มีการขายในช่วงนี้</div>`;
 }
+
 
 async function loadDashboard(range) {
   try {

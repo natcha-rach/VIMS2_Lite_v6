@@ -86,6 +86,17 @@ create index if not exists idx_sales_item on sales(item_id);
 create index if not exists idx_sales_date on sales(sale_date);
 create index if not exists idx_expenses_date on expenses(expense_date);
 
+-- Item edit history: audit trail สำหรับการแก้ไขสินค้าโดยตรงจาก Frontend
+create table if not exists item_change_history (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references items(id) on delete cascade,
+  action text not null default 'update' check (action in ('update','image_replace')),
+  changed_fields jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_item_change_history_item on item_change_history(item_id, created_at desc);
+
+
 -- ค่าเริ่มต้น: กลุ่มราคาที่แก้ได้จากหน้า Settings/ต่อ Lot ได้เอง
 insert into app_settings(key, value)
 values
@@ -107,6 +118,7 @@ alter table item_images enable row level security;
 alter table sales enable row level security;
 alter table expenses enable row level security;
 alter table app_settings enable row level security;
+alter table item_change_history enable row level security;
 
 drop policy if exists "allow all - lots" on lots;
 drop policy if exists "allow all - lot_groups" on lot_groups;
@@ -115,6 +127,7 @@ drop policy if exists "allow all - item_images" on item_images;
 drop policy if exists "allow all - sales" on sales;
 drop policy if exists "allow all - expenses" on expenses;
 drop policy if exists "allow all - app_settings" on app_settings;
+drop policy if exists "allow all - item_change_history" on item_change_history;
 
 create policy "allow all - lots" on lots for all using (true) with check (true);
 create policy "allow all - lot_groups" on lot_groups for all using (true) with check (true);
@@ -123,6 +136,7 @@ create policy "allow all - item_images" on item_images for all using (true) with
 create policy "allow all - sales" on sales for all using (true) with check (true);
 create policy "allow all - expenses" on expenses for all using (true) with check (true);
 create policy "allow all - app_settings" on app_settings for all using (true) with check (true);
+create policy "allow all - item_change_history" on item_change_history for all using (true) with check (true);
 
 drop policy if exists "public read item images" on storage.objects;
 drop policy if exists "public upload item images" on storage.objects;
@@ -166,3 +180,62 @@ $$;
 
 revoke all on function public.sell_item(uuid,numeric,text,text,text) from public;
 grant execute on function public.sell_item(uuid,numeric,text,text,text) to anon, authenticated;
+
+
+-- Atomic update: เปลี่ยนข้อมูล Item + สร้าง history record ใน transaction เดียว
+create or replace function public.update_item_with_history(
+  p_item_id uuid,
+  p_item_name text,
+  p_size text,
+  p_condition text,
+  p_tier text,
+  p_status text,
+  p_group_id uuid,
+  p_cost_price numeric,
+  p_base_price numeric,
+  p_current_price numeric,
+  p_changed_fields jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_item items%rowtype;
+  v_updated items%rowtype;
+  v_history_id uuid;
+begin
+  select * into v_item from items where id = p_item_id for update;
+  if not found then raise exception 'ไม่พบสินค้า'; end if;
+  -- ไม่อนุญาตให้แก้สถานะ sold กลับเป็น available/damaged เพราะประวัติการขายต้องไม่หาย
+  if v_item.status = 'sold' and p_status <> 'sold' then
+    raise exception 'สินค้าที่ขายแล้วไม่สามารถเปลี่ยนกลับจาก sold ได้';
+  end if;
+  if p_condition not in ('A','B') then raise exception 'Condition ไม่ถูกต้อง'; end if;
+  if p_tier not in ('normal','head') then raise exception 'Tier ไม่ถูกต้อง'; end if;
+  if p_status not in ('available','sold','damaged') then raise exception 'Status ไม่ถูกต้อง'; end if;
+
+  update items
+  set item_name = trim(p_item_name),
+      size = nullif(trim(p_size), ''),
+      condition = p_condition,
+      tier = p_tier,
+      status = p_status,
+      group_id = p_group_id,
+      cost_price = greatest(p_cost_price, 0),
+      base_price = greatest(p_base_price, 0),
+      current_price = greatest(p_current_price, 0)
+  where id = p_item_id
+  returning * into v_updated;
+
+  insert into item_change_history(item_id, action, changed_fields)
+  values (p_item_id, 'update', coalesce(p_changed_fields, '{}'::jsonb))
+  returning id into v_history_id;
+
+  return jsonb_build_object('item', to_jsonb(v_updated), 'history_id', v_history_id);
+end;
+$$;
+
+revoke all on function public.update_item_with_history(uuid,text,text,text,text,text,uuid,numeric,numeric,numeric,jsonb) from public;
+grant execute on function public.update_item_with_history(uuid,text,text,text,text,text,uuid,numeric,numeric,numeric,jsonb) to anon, authenticated;

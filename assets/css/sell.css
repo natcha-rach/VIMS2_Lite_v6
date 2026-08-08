@@ -38,3 +38,49 @@
   max-height: 85vh;
   overflow-y: auto;
 }
+
+/* ==========================================================
+   v8 — Item Detail / Sale History
+   sell.html → sell.js → item_images + items + sales
+   ========================================================== */
+.sell-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  color: var(--color-ink-soft);
+  font-size: 13px;
+  background: var(--color-surface);
+}
+.item-tile-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--color-bg);
+  overflow: hidden;
+  margin-bottom: 8px;
+  font-size: 32px;
+}
+.item-tile-image img, .detail-image img { width: 100%; height: 100%; object-fit: cover; }
+.sale-detail-sheet { max-width: 620px; }
+.sale-detail-sheet .modal-head p { margin: 4px 0 0; color: var(--color-ink-soft); font-size: 13px; }
+.detail-images { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0 16px; }
+.detail-image { aspect-ratio: 1 / 1; border-radius: 12px; background: var(--color-bg); display: grid; place-items: center; overflow: hidden; color: var(--color-ink-soft); font-size: 30px; }
+.detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 18px; }
+.detail-grid > div { border: 1px solid var(--color-line); border-radius: 10px; padding: 10px; background: var(--color-surface); }
+.detail-grid span, .detail-grid b { display: block; }
+.detail-grid span { font-size: 11px; color: var(--color-ink-soft); margin-bottom: 3px; }
+.sale-history-section { margin: 16px 0; }
+.sale-history-section .section-title h3 { margin: 0 0 8px; }
+.sale-history-row { display: grid; grid-template-columns: 1.3fr 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--color-line); font-size: 12px; }
+.sale-history-row div { display: flex; flex-direction: column; gap: 2px; }
+.sale-history-row span { color: var(--color-ink-soft); }
+.sale-history-row .profit { color: #287a4b; }
+.sale-history-row .loss { color: #b33a3a; }
+.empty-state.small { padding: 12px; font-size: 12px; }
+@media (max-width: 520px) {
+  .detail-grid { grid-template-columns: 1fr 1fr; }
+  .sale-history-row { grid-template-columns: 1fr; gap: 5px; }
+}

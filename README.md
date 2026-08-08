@@ -202,3 +202,92 @@ Photo Queue / Excel
 - `// keyboard` = workflow สำหรับการลงข้อมูลจำนวนมาก
 
 แนวคิดคือไม่ใส่ comment ทุกบรรทัดที่เป็น JavaScript พื้นฐาน แต่จะใส่ comment ที่อธิบาย “โค้ดส่วนนี้เชื่อมกับอะไรและทำไปเพื่ออะไร” เพื่อให้กลับมาแก้ต่อได้ง่าย
+
+
+## V7 — Item Edit + Audit Trail
+
+- `items.html` เพิ่มปุ่ม `แก้ไข` ใน Stock Card
+- Edit Modal แก้ชื่อ / Size / A-B / Tier / Group / ต้นทุน / ราคาตั้งต้น / ราคาปัจจุบัน / status ที่อนุญาต
+- Item ที่ `sold` ห้ามเปลี่ยนกลับเป็น `available` หรือ `damaged` เพื่อรักษาประวัติการขาย
+- รูปเดิมดูได้สูงสุด 2 รูป; ถ้าเลือกไฟล์ใหม่ ระบบ replace รูปเดิมทั้งชุด 1–2 รูป
+- `item_change_history` เก็บ old/new value ของ field ที่เปลี่ยน
+- `update_item_with_history()` ทำ Item update + history insert ใน transaction เดียวผ่าน Supabase RPC
+
+### Code Map V7
+
+```text
+Stock Card
+  ↓ data-edit-item
+openEditItem(itemId)
+  ↓
+Edit Modal
+  ├── update_item_with_history() → items + item_change_history
+  └── uploadItemImages() → Storage/item-images → item_images
+
+item_change_history
+  ↓
+loadItemHistory()
+  ↓
+Edit Modal / ประวัติการแก้ไข
+```
+
+> ก่อนใช้งาน V7 กับฐานเดิม ให้รัน `sql/migration_v7.sql` ใน Supabase SQL Editor
+
+## V8 Code Map — Sale Workflow
+
+```text
+sell.html
+  ↓
+assets/js/sell.js
+  ├── loadSellGrid()
+  │     └── Supabase: items + lots + lot_groups
+  │     └── Supabase: item_images (รูป 1–2 รูป)
+  │
+  ├── openItemSaleDetail()
+  │     └── แสดงรายละเอียด Item / Lot / Group / ราคา / ต้นทุน
+  │     └── Supabase: sales (ประวัติการขาย)
+  │
+  └── openSellConfirm()
+        ↓
+      sell_item RPC
+        ├── INSERT sales
+        └── UPDATE items.status = sold
+```
+
+### Business rules ที่ต้องจำ
+- `available -> sold` ทำผ่าน `sell_item` RPC
+- สินค้าที่ `sold` แล้วไม่ควรถูกนำกลับเข้า available
+- ราคาที่ใช้คำนวณกำไรใน Sale คือ `sales.sale_price - sales.cost_price`
+- รูปสินค้าเก็บใน `item_images` สูงสุด 2 รูปต่อ Item
+- `current_price` เป็นราคาเสนอขายปัจจุบัน; `sale_price` คือราคาที่ขายจริง
+
+
+## V9 Code Map — Dashboard / Reports
+
+```text
+index.html
+  -> assets/js/dashboard.js
+      -> Supabase: lots / lot_groups / items / sales / expenses
+      -> Dashboard KPIs
+      -> Channel / Payment / Tier
+      -> Weekend (ถนนคนเดิน เสาร์/อาทิตย์)
+      -> Top Profit Items
+      -> Lot Recovery
+
+reports.html
+  -> assets/js/reports.js
+      -> Supabase: sales / expenses / items / lots
+      -> Revenue / COGS / Gross Profit / Expenses / Net Profit
+      -> Payment / Channel / Tier / Lot / Weekend
+      -> Trend รายวัน/เดือน/ปี
+```
+
+### V9 business rules
+- กำไรขั้นต้น = ราคาขายจริง - ต้นทุนที่ snapshot ไว้ใน `sales.cost_price`
+- กำไรสุทธิ = กำไรขั้นต้น - ค่าใช้จ่ายในช่วงเดียวกัน
+- ROI ของ Lot ในรายงาน = กำไรที่รับรู้ / ต้นทุนซื้อ Lot
+- Weekend report นับเฉพาะ `channel = street_market` และแยกวันเสาร์/อาทิตย์
+- Dashboard ไม่แก้ข้อมูลธุรกรรม เป็น read-only analytics layer
+
+### V9 database
+รัน `sql/migration_v9.sql` หลัง migration_v8 เพื่อเพิ่ม index สำหรับรายงาน
