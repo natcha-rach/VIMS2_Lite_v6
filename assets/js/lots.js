@@ -1,3 +1,8 @@
+/* ==========================================================
+   STUDY NOTE — อ่าน file นี้โดยไล่จาก function ตาม comment “Function:”
+   ทุก function จะบอกหน้าที่และจุดเชื่อมต่อกับ UI / Supabase / ไฟล์อื่น
+   ========================================================== */
+
 let editingLotId = null;
 let lotsCache = [];
 let activeLotId = null;
@@ -11,7 +16,9 @@ function escapeHtml(v = "") {
   }[c]));
 }
 
+// Function: setDefaultPurchaseDate — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function setDefaultPurchaseDate() { $("purchaseDate").valueAsDate = new Date(); }
+// Function: updateAvgCost — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function updateAvgCost() {
   const cost = Number($("totalCost").value || 0);
   const count = Number($("totalItems").value || 0);
@@ -46,6 +53,7 @@ $("lotForm").addEventListener("submit", async (e) => {
 });
 
 $("cancelLotEdit").addEventListener("click", exitEditMode);
+// Function: exitEditMode — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function exitEditMode() {
   editingLotId = null;
   $("lotForm").reset();
@@ -56,6 +64,7 @@ function exitEditMode() {
   $("cancelLotEdit").classList.add("hidden");
 }
 
+// Function: enterEditMode — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function enterEditMode(lot) {
   editingLotId = lot.id;
   $("lotName").value = lot.lot_name || "";
@@ -71,6 +80,7 @@ function enterEditMode(lot) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+// Function: loadLots — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadLots() {
   const { data, error } = await supabaseClient.from("lots").select("*").order("purchase_date", { ascending: false });
   if (error) {
@@ -135,6 +145,7 @@ async function loadLots() {
   document.querySelectorAll('[data-action="groups"]').forEach(btn => btn.addEventListener("click", () => openGroupManager(btn.dataset.id)));
 }
 
+// Function: handleDelete — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function handleDelete(lotId) {
   const lot = lotsCache.find(l => l.id === lotId);
   if (!lot) return;
@@ -147,6 +158,7 @@ async function handleDelete(lotId) {
   loadLots();
 }
 
+// Function: openGroupManager — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function openGroupManager(lotId) {
   activeLotId = lotId;
   const lot = lotsCache.find(l => l.id === lotId); if (!lot) return;
@@ -158,6 +170,7 @@ async function openGroupManager(lotId) {
   await loadGroupsForLot();
 }
 
+// Function: loadGroupsForLot — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadGroupsForLot() {
   if (!activeLotId) return;
   const { data, error } = await supabaseClient.from("lot_groups").select("*").eq("lot_id", activeLotId).order("sort_order").order("created_at");
@@ -173,10 +186,12 @@ async function loadGroupsForLot() {
   document.querySelectorAll("[data-group-delete]").forEach(btn => btn.addEventListener("click", () => deleteGroup(btn.dataset.groupDelete)));
 }
 
+// Function: resetGroupForm — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function resetGroupForm() {
   $("groupId").value = ""; $("groupName").value = ""; $("groupBasePrice").value = ""; $("groupTier").value = "normal"; $("groupSortOrder").value = activeGroups.length || 0;
   $("groupSubmitBtn").textContent = "เพิ่มกลุ่ม"; $("cancelGroupEdit").classList.add("hidden");
 }
+// Function: editGroup — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function editGroup(id) {
   const g = activeGroups.find(x => x.id === id); if (!g) return;
   $("groupId").value = g.id; $("groupName").value = g.group_name; $("groupBasePrice").value = g.base_price; $("groupTier").value = g.tier; $("groupSortOrder").value = g.sort_order || 0;
@@ -193,6 +208,7 @@ $("groupForm").addEventListener("submit", async e => {
   showToast(id ? "แก้ไขกลุ่มแล้ว" : "เพิ่มกลุ่มแล้ว");
   resetGroupForm(); await loadGroupsForLot(); await loadLots();
 });
+// Function: deleteGroup — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function deleteGroup(id) {
   const g = activeGroups.find(x => x.id === id); if (!g) return;
   if (!confirm(`ลบกลุ่ม “${g.group_name}” ใช่ไหม?`)) return;
@@ -200,10 +216,12 @@ async function deleteGroup(id) {
   if (error) return showToast("ลบกลุ่มไม่สำเร็จ: " + error.message);
   showToast("ลบกลุ่มแล้ว"); await loadGroupsForLot(); await loadLots();
 }
+// Function: closeGroupModal — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function closeGroupModal() { $("groupModal").classList.add("hidden"); $("groupModal").setAttribute("aria-hidden", "true"); activeLotId = null; activeGroups = []; }
 document.querySelectorAll("[data-close-group]").forEach(el => el.addEventListener("click", closeGroupModal));
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("groupModal").classList.contains("hidden")) closeGroupModal(); });
 
+// Function: showToast — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showToast(msg) { const t = $("toast"); if (!t) return; t.textContent = msg; t.classList.add("show"); clearTimeout(window.__toast); window.__toast = setTimeout(() => t.classList.remove("show"), 2600); }
 
 loadLots();

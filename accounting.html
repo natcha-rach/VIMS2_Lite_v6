@@ -1,305 +1,196 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="th">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>บัญชี | ระบบร้านเสื้อมือสอง</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Kanit:wght@300;400;500;600&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="assets/css/base.css" />
-    <link rel="stylesheet" href="assets/css/accounting.css" />
-  </head>
-  <body>
-    <nav id="sidebar" class="sidebar">
-      <div class="sidebar-header">
-        <div class="brand">
-          <span class="brand-mark">👕</span
-          ><span class="brand-text">Bubbles <span>Gumps</span></span>
-        </div>
-        <button
-          id="navCollapse"
-          class="nav-collapse"
-          aria-label="ย่อ/ขยายเมนู"
-          title="ย่อ/ขยายเมนู"
-        >
-          ‹
-        </button>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>บัญชี | ระบบร้านเสื้อมือสอง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/base.css" />
+<link rel="stylesheet" href="assets/css/accounting.css" />
+</head>
+<body>
+
+<nav id="sidebar" class="sidebar">
+  <div class="sidebar-header">
+    <div class="brand"><span class="brand-mark">👕</span><span class="brand-text">เสื้อ<span>มือสอง</span></span></div>
+    <button id="navCollapse" class="nav-collapse" aria-label="ย่อ/ขยายเมนู" title="ย่อ/ขยายเมนู">‹</button>
+  </div>
+  <div class="sidebar-links">
+    <a href="index.html" title="ภาพรวม"><span class="icon">📊</span><span class="label">ภาพรวม</span></a>
+    <a href="lots.html" title="ล็อต"><span class="icon">📦</span><span class="label">ล็อต</span></a>
+    <a href="items.html" title="สินค้า"><span class="icon">👕</span><span class="label">สินค้า</span></a>
+    <a href="sell.html" title="ขายของ"><span class="icon">💰</span><span class="label">ขายของ</span></a>
+    <a href="reports.html" title="รายงาน"><span class="icon">📅</span><span class="label">รายงาน</span></a>
+    <a href="accounting.html" title="บัญชี"><span class="icon">🧾</span><span class="label">บัญชี</span></a>
+  </div>
+</nav>
+
+
+<div id="mainWrap">
+  <div class="topbar">
+    <div class="subtitle">บัญชีร้าน</div>
+  </div>
+
+  <div class="page">
+  <h1>สรุปบัญชี</h1>
+  <p style="color:var(--color-ink-soft); margin-top:0;">ภาพรวมเงินเข้า-ออกทั้งหมด และกำไรที่แท้จริงหลังหักค่าใช้จ่าย</p>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="label">เงินทุนลงล็อตทั้งหมด</div>
+      <div class="value" id="accCapital">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">ค่าใช้จ่ายอื่นๆ รวม</div>
+      <div class="value" id="accExpenses">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">รายรับจากการขายรวม</div>
+      <div class="value" id="accRevenue">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">กำไรสุทธิ (หลังหักค่าใช้จ่าย)</div>
+      <div class="value" id="accNetProfit">-</div>
+    </div>
+  </div>
+
+  <div class="tag-card">
+    <div class="cashflow-note">
+      <strong>กำไรสุทธิ</strong> = ยอดขาย − ต้นทุนสินค้าที่ขายได้ − ค่าใช้จ่ายอื่นๆ (แบบบัญชี นับเฉพาะของที่ขายไปแล้ว)<br/>
+      <strong>กระแสเงินสด</strong> = เงินที่ได้จากการขายจริง − เงินที่จ่ายไปทั้งหมด (ทั้งของที่ขายแล้วและยังไม่ขาย) บอกว่าตอนนี้ "เงินสดในมือ" สุทธิเท่าไหร่
+    </div>
+    <div class="cashflow-value">
+      กระแสเงินสดสุทธิ: <span id="accCashflow">-</span>
+    </div>
+  </div>
+
+  <h2 style="margin-top:24px;">ระบบแบ่งถังเงิน</h2>
+  <p style="color:var(--color-ink-soft); margin-top:0; font-size:13px;">
+    ตั้ง % แบ่งเงินหลังขายเป็น 4 ถัง แล้วระบบคำนวณจำนวนเงินแต่ละถังให้อัตโนมัติ (รวมกันต้องได้ 100%)
+  </p>
+
+  <div class="tag-card">
+    <form id="bucketForm">
+      <div class="bucket-input-row">
+        <label for="pctCost">💰 เก็บต้นทุน (ไว้ซื้อล็อตใหม่)</label>
+        <div class="pct-input"><input type="number" id="pctCost" min="0" max="100" step="1" value="40" /><span>%</span></div>
       </div>
-      <div class="sidebar-links">
-        <a href="index.html" title="ภาพรวม"
-          ><span class="icon">📊</span><span class="label">ภาพรวม</span></a
-        >
-        <a href="lots.html" title="ล็อต"
-          ><span class="icon">📦</span><span class="label">ล็อต</span></a
-        >
-        <a href="items.html" title="สินค้า"
-          ><span class="icon">👕</span><span class="label">สินค้า</span></a
-        >
-        <a href="sell.html" title="ขายของ"
-          ><span class="icon">💰</span><span class="label">ขายของ</span></a
-        >
-        <a href="reports.html" title="รายงาน"
-          ><span class="icon">📅</span><span class="label">รายงาน</span></a
-        >
-        <a href="accounting.html" title="บัญชี"
-          ><span class="icon">🧾</span><span class="label">บัญชี</span></a
-        >
+      <div class="bucket-input-row">
+        <label for="pctDebt">💳 ใช้หนี้รายเดือน</label>
+        <div class="pct-input"><input type="number" id="pctDebt" min="0" max="100" step="1" value="20" /><span>%</span></div>
       </div>
-    </nav>
-
-    <div id="mainWrap">
-      <div class="topbar">
-        <div class="subtitle">บัญชีร้าน</div>
+      <div class="bucket-input-row">
+        <label for="pctReserve">🛟 เงินสำรอง</label>
+        <div class="pct-input"><input type="number" id="pctReserve" min="0" max="100" step="1" value="20" /><span>%</span></div>
+      </div>
+      <div class="bucket-input-row">
+        <label for="pctOther">🧾 ค่าใช้จ่ายอื่นๆ</label>
+        <div class="pct-input"><input type="number" id="pctOther" min="0" max="100" step="1" value="20" /><span>%</span></div>
       </div>
 
-      <div class="page">
-        <h1>สรุปบัญชี</h1>
-        <p style="color: var(--color-ink-soft); margin-top: 0">
-          ภาพรวมเงินเข้า-ออกทั้งหมด และกำไรที่แท้จริงหลังหักค่าใช้จ่าย
-        </p>
+      <div id="pctTotalWarning" class="pct-warning hidden">รวมกันได้ <span id="pctTotalValue">0</span>% (ต้องรวมให้ได้ 100%)</div>
 
-        <div class="stat-grid">
-          <div class="stat-card">
-            <div class="label">เงินทุนลงล็อตทั้งหมด</div>
-            <div class="value" id="accCapital">-</div>
-          </div>
-          <div class="stat-card">
-            <div class="label">ค่าใช้จ่ายอื่นๆ รวม</div>
-            <div class="value" id="accExpenses">-</div>
-          </div>
-          <div class="stat-card">
-            <div class="label">รายรับจากการขายรวม</div>
-            <div class="value" id="accRevenue">-</div>
-          </div>
-          <div class="stat-card">
-            <div class="label">กำไรสุทธิ (หลังหักค่าใช้จ่าย)</div>
-            <div class="value" id="accNetProfit">-</div>
-          </div>
-        </div>
+      <button type="submit" class="btn btn-primary btn-block" style="margin-top:10px;">บันทึกเปอร์เซ็นต์นี้ไว้ใช้ครั้งหน้า</button>
+    </form>
+  </div>
 
-        <div class="tag-card">
-          <div class="cashflow-note">
-            <strong>กำไรสุทธิ</strong> = ยอดขาย − ต้นทุนสินค้าที่ขายได้ −
-            ค่าใช้จ่ายอื่นๆ (แบบบัญชี นับเฉพาะของที่ขายไปแล้ว)<br />
-            <strong>กระแสเงินสด</strong> = เงินที่ได้จากการขายจริง −
-            เงินที่จ่ายไปทั้งหมด (ทั้งของที่ขายแล้วและยังไม่ขาย) บอกว่าตอนนี้
-            "เงินสดในมือ" สุทธิเท่าไหร่
-          </div>
-          <div class="cashflow-value">
-            กระแสเงินสดสุทธิ: <span id="accCashflow">-</span>
-          </div>
-        </div>
-
-        <h2 style="margin-top: 24px">ระบบแบ่งถังเงิน</h2>
-        <p style="color: var(--color-ink-soft); margin-top: 0; font-size: 13px">
-          ตั้ง % แบ่งเงินหลังขายเป็น 4 ถัง
-          แล้วระบบคำนวณจำนวนเงินแต่ละถังให้อัตโนมัติ (รวมกันต้องได้ 100%)
-        </p>
-
-        <div class="tag-card">
-          <form id="bucketForm">
-            <div class="bucket-input-row">
-              <label for="pctCost">💰 เก็บต้นทุน (ไว้ซื้อล็อตใหม่)</label>
-              <div class="pct-input">
-                <input
-                  type="number"
-                  id="pctCost"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="40"
-                /><span>%</span>
-              </div>
-            </div>
-            <div class="bucket-input-row">
-              <label for="pctDebt">💳 ใช้หนี้รายเดือน</label>
-              <div class="pct-input">
-                <input
-                  type="number"
-                  id="pctDebt"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="20"
-                /><span>%</span>
-              </div>
-            </div>
-            <div class="bucket-input-row">
-              <label for="pctReserve">🛟 เงินสำรอง</label>
-              <div class="pct-input">
-                <input
-                  type="number"
-                  id="pctReserve"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="20"
-                /><span>%</span>
-              </div>
-            </div>
-            <div class="bucket-input-row">
-              <label for="pctOther">🧾 ค่าใช้จ่ายอื่นๆ</label>
-              <div class="pct-input">
-                <input
-                  type="number"
-                  id="pctOther"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="20"
-                /><span>%</span>
-              </div>
-            </div>
-
-            <div id="pctTotalWarning" class="pct-warning hidden">
-              รวมกันได้ <span id="pctTotalValue">0</span>% (ต้องรวมให้ได้ 100%)
-            </div>
-
-            <button
-              type="submit"
-              class="btn btn-primary btn-block"
-              style="margin-top: 10px"
-            >
-              บันทึกเปอร์เซ็นต์นี้ไว้ใช้ครั้งหน้า
-            </button>
-          </form>
-        </div>
-
-        <div class="tag-card">
-          <div class="field">
-            <label for="bucketBaseAmount"
-              >คำนวณจากยอดเงิน (บาท) — ค่าเริ่มต้น = ยอดขายรวมทั้งหมด
-              แก้เป็นยอดขายวันนี้/ล็อตนี้ก็ได้</label
-            >
-            <input type="number" id="bucketBaseAmount" min="0" step="0.01" />
-          </div>
-
-          <div class="bucket-results" id="bucketResults">
-            <div class="bucket-result-row">
-              <span>💰 เก็บต้นทุน</span>
-              <strong id="bucketCostAmount">0 ฿</strong>
-            </div>
-            <div class="bucket-result-row">
-              <span>💳 ใช้หนี้รายเดือน</span>
-              <strong id="bucketDebtAmount">0 ฿</strong>
-            </div>
-            <div class="bucket-result-row">
-              <span>🛟 เงินสำรอง</span>
-              <strong id="bucketReserveAmount">0 ฿</strong>
-            </div>
-            <div class="bucket-result-row">
-              <span>🧾 ค่าใช้จ่ายอื่นๆ</span>
-              <strong id="bucketOtherAmount">0 ฿</strong>
-            </div>
-          </div>
-        </div>
-
-        <h2 style="margin-top: 24px">เพิ่มค่าใช้จ่าย</h2>
-        <div class="tag-card">
-          <form id="expenseForm">
-            <div class="field-row">
-              <div class="field">
-                <label for="expenseDate">วันที่</label>
-                <input type="date" id="expenseDate" required />
-              </div>
-              <div class="field">
-                <label for="expenseAmount">จำนวนเงิน (บาท)</label>
-                <input
-                  type="number"
-                  id="expenseAmount"
-                  step="0.01"
-                  min="0"
-                  required
-                />
-              </div>
-            </div>
-            <div class="field">
-              <label for="expenseCategory">หมวดหมู่</label>
-              <input
-                type="text"
-                id="expenseCategory"
-                list="categoryOptions"
-                placeholder="เช่น ค่าเช่าแผง"
-                required
-              />
-              <datalist id="categoryOptions">
-                <option value="ค่าเช่าแผง"></option>
-                <option value="ค่าเดินทาง"></option>
-                <option value="บรรจุภัณฑ์/ถุง"></option>
-                <option value="ค่าการตลาด"></option>
-                <option value="ค่าซัก/รีดเสื้อ"></option>
-                <option value="อื่นๆ"></option>
-              </datalist>
-            </div>
-            <div class="field">
-              <label for="expenseNote">หมายเหตุ</label>
-              <input
-                type="text"
-                id="expenseNote"
-                placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)"
-              />
-            </div>
-            <div class="field-row">
-              <button
-                type="button"
-                id="cancelExpenseEdit"
-                class="btn btn-ghost hidden"
-                style="flex: 1"
-              >
-                ยกเลิกแก้ไข
-              </button>
-              <button
-                type="submit"
-                id="expenseSubmitBtn"
-                class="btn btn-primary"
-                style="flex: 2"
-              >
-                บันทึกค่าใช้จ่าย
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <h2 style="margin-top: 24px">รายการค่าใช้จ่ายทั้งหมด</h2>
-        <div id="expenseList"><div class="empty-state">กำลังโหลด...</div></div>
-
-        <div class="ledger-header">
-          <h2 style="margin: 0">สมุดบัญชี (เงินเข้า-ออกทั้งหมด)</h2>
-          <button id="exportCsvBtn" class="btn btn-ghost btn-sm">
-            ⬇ ส่งออก CSV
-          </button>
-        </div>
-        <div class="tag-card">
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>วันที่</th>
-                  <th>รายการ</th>
-                  <th style="text-align: right">เงินเข้า</th>
-                  <th style="text-align: right">เงินออก</th>
-                  <th style="text-align: right">คงเหลือสะสม</th>
-                </tr>
-              </thead>
-              <tbody id="ledgerBody">
-                <tr>
-                  <td colspan="5">กำลังโหลด...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+  <div class="tag-card">
+    <div class="field">
+      <label for="bucketBaseAmount">คำนวณจากยอดเงิน (บาท) — ค่าเริ่มต้น = ยอดขายรวมทั้งหมด แก้เป็นยอดขายวันนี้/ล็อตนี้ก็ได้</label>
+      <input type="number" id="bucketBaseAmount" min="0" step="0.01" />
     </div>
 
-    <div class="toast" id="toast"></div>
+    <div class="bucket-results" id="bucketResults">
+      <div class="bucket-result-row">
+        <span>💰 เก็บต้นทุน</span>
+        <strong id="bucketCostAmount">0 ฿</strong>
+      </div>
+      <div class="bucket-result-row">
+        <span>💳 ใช้หนี้รายเดือน</span>
+        <strong id="bucketDebtAmount">0 ฿</strong>
+      </div>
+      <div class="bucket-result-row">
+        <span>🛟 เงินสำรอง</span>
+        <strong id="bucketReserveAmount">0 ฿</strong>
+      </div>
+      <div class="bucket-result-row">
+        <span>🧾 ค่าใช้จ่ายอื่นๆ</span>
+        <strong id="bucketOtherAmount">0 ฿</strong>
+      </div>
+    </div>
+  </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="assets/js/supabaseClient.js"></script>
-    <script src="assets/js/nav.js"></script>
-    <script src="assets/js/accounting.js"></script>
-  </body>
+  <h2 style="margin-top:24px;">เพิ่มค่าใช้จ่าย</h2>
+  <div class="tag-card">
+    <form id="expenseForm">
+      <div class="field-row">
+        <div class="field">
+          <label for="expenseDate">วันที่</label>
+          <input type="date" id="expenseDate" required />
+        </div>
+        <div class="field">
+          <label for="expenseAmount">จำนวนเงิน (บาท)</label>
+          <input type="number" id="expenseAmount" step="0.01" min="0" required />
+        </div>
+      </div>
+      <div class="field">
+        <label for="expenseCategory">หมวดหมู่</label>
+        <input type="text" id="expenseCategory" list="categoryOptions" placeholder="เช่น ค่าเช่าแผง" required />
+        <datalist id="categoryOptions">
+          <option value="ค่าเช่าแผง"></option>
+          <option value="ค่าเดินทาง"></option>
+          <option value="บรรจุภัณฑ์/ถุง"></option>
+          <option value="ค่าการตลาด"></option>
+          <option value="ค่าซัก/รีดเสื้อ"></option>
+          <option value="อื่นๆ"></option>
+        </datalist>
+      </div>
+      <div class="field">
+        <label for="expenseNote">หมายเหตุ</label>
+        <input type="text" id="expenseNote" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)" />
+      </div>
+      <div class="field-row">
+        <button type="button" id="cancelExpenseEdit" class="btn btn-ghost hidden" style="flex:1;">ยกเลิกแก้ไข</button>
+        <button type="submit" id="expenseSubmitBtn" class="btn btn-primary" style="flex:2;">บันทึกค่าใช้จ่าย</button>
+      </div>
+    </form>
+  </div>
+
+  <h2 style="margin-top:24px;">รายการค่าใช้จ่ายทั้งหมด</h2>
+  <div id="expenseList"><div class="empty-state">กำลังโหลด...</div></div>
+
+  <div class="ledger-header">
+    <h2 style="margin:0;">สมุดบัญชี (เงินเข้า-ออกทั้งหมด)</h2>
+    <button id="exportCsvBtn" class="btn btn-ghost btn-sm">⬇ ส่งออก CSV</button>
+  </div>
+  <div class="tag-card">
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>วันที่</th>
+          <th>รายการ</th>
+          <th style="text-align:right">เงินเข้า</th>
+          <th style="text-align:right">เงินออก</th>
+          <th style="text-align:right">คงเหลือสะสม</th>
+        </tr>
+      </thead>
+      <tbody id="ledgerBody"><tr><td colspan="5">กำลังโหลด...</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabaseClient.js"></script>
+<script src="assets/js/nav.js"></script>
+<script src="assets/js/accounting.js"></script>
+<script src="assets/js/realtime.js"></script>
+</body>
 </html>

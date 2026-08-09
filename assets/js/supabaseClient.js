@@ -1,3 +1,8 @@
+/* ==========================================================
+   STUDY NOTE — อ่าน file นี้โดยไล่จาก function ตาม comment “Function:”
+   ทุก function จะบอกหน้าที่และจุดเชื่อมต่อกับ UI / Supabase / ไฟล์อื่น
+   ========================================================== */
+
 // ==========================================================
 // ตั้งค่าการเชื่อมต่อ Supabase
 // วิธีหาค่า: Supabase Dashboard -> Project Settings -> API
@@ -18,12 +23,14 @@ const PAYMENT_LABELS = {
 };
 
 // ฟอร์แมตตัวเลขเป็นสกุลเงินบาท
+// Function: formatBaht — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function formatBaht(num) {
   const n = Number(num) || 0;
   return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ฿";
 }
 
 // ฟอร์แมตวันที่แบบไทยสั้นๆ
+// Function: formatDate — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function formatDate(dateStr) {
   const d = new Date(dateStr);
   return d.toLocaleDateString("th-TH", { day: "2-digit", month: "short", year: "numeric" });

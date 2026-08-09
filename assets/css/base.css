@@ -377,3 +377,45 @@ td.loss { color: var(--color-loss); }
 @media (min-width: 1200px) {
   .page { max-width: 1080px; }
 }
+
+/* ============================================================
+   VIMS2 V10.1 — Multi-device + iPad Pro 13" responsive layer
+   เป้าหมาย: iPad Pro 13" ทั้งแนวตั้ง (~1024px) และแนวนอน (~1366px)
+   ============================================================ */
+
+/* ---------- Sync indicator: สถานะจาก realtime.js ---------- */
+.sync-indicator{position:fixed;right:18px;bottom:18px;z-index:1500;display:flex;align-items:center;gap:8px;padding:7px 11px;border:1px solid var(--color-line);border-radius:999px;background:rgba(255,255,255,.94);box-shadow:0 5px 18px rgba(43,38,32,.10);font-size:11px;color:var(--color-ink-soft);backdrop-filter:blur(8px)}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#c8b99f;box-shadow:0 0 0 3px rgba(200,185,159,.16)}
+.sync-online .sync-dot{background:#4A7C59}.sync-offline .sync-dot{background:#B5533C}.sync-connecting .sync-dot{background:#A9663E}
+@media(max-width:859.98px){.sync-indicator{right:10px;bottom:calc(76px + env(safe-area-inset-bottom,0px));font-size:10px}}
+
+/* ---------- iPad Pro 13": พื้นที่หลักกว้างขึ้นและจัด card แบบ tablet ---------- */
+@media(min-width:1024px) and (max-width:1400px){
+  .page{max-width:1180px;padding:28px 30px 42px}
+  .topbar{padding-left:28px;padding-right:28px}
+  .sidebar{width:220px}
+  #mainWrap{margin-left:220px}
+  body.sidebar-collapsed #mainWrap{margin-left:72px}
+  .tag-card{padding:18px;margin-bottom:16px}
+  .btn{min-height:42px}
+  .field input,.field select,.field textarea{min-height:44px}
+  .stat-grid{gap:14px}
+  table{font-size:14px}
+}
+
+/* iPad Pro 13" แนวตั้ง: ให้ 2-column กลายเป็น 1-column เมื่อพื้นที่จริงแคบ */
+@media(min-width:860px) and (max-width:1100px){
+  .dashboard-two-col{grid-template-columns:1fr!important}
+  .dashboard-main-kpis{grid-template-columns:1fr 1fr!important}
+  .field-row.three,.field-row.four{grid-template-columns:1fr 1fr!important}
+  .quick-entry{grid-template-columns:280px 1fr!important}
+  .edit-item-layout{grid-template-columns:280px 1fr!important}
+}
+
+/* iPad/Tablet touch target: ปุ่มและแถวกดง่ายกว่า desktop */
+@media (pointer:coarse) and (min-width:860px){
+  .btn,.icon-btn,.sidebar-links a{min-height:44px}
+  .stock-row{min-height:76px}
+  .photo-queue-card select{min-height:42px}
+  .bulk-table input,.bulk-table select{min-height:42px}
+}

@@ -10,6 +10,7 @@ let itemImagesById = {};
 let selectedItem = null;
 
 // โหลดสินค้าเฉพาะสถานะ available เพื่อไม่ให้สินค้าที่ขายแล้วกลับมาเลือกขายซ้ำ
+// Function: loadSellGrid — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadSellGrid() {
   const { data: items, error } = await supabaseClient
     .from("items")
@@ -47,6 +48,7 @@ async function loadSellGrid() {
 }
 
 // สร้างการ์ดสินค้า: คลิกได้ทั้งการ์ดเพื่อเปิดรายละเอียดก่อนขาย
+// Function: renderGrid — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderGrid(items) {
   if (!items.length) {
     document.getElementById("sellGrid").innerHTML = `<div class="empty-state">ไม่มีของในสต็อกให้ขาย</div>`;
@@ -71,6 +73,7 @@ function renderGrid(items) {
 }
 
 // ค้นหาแบบทันทีจากชื่อสินค้า / size / group / lot เพื่อให้ใช้หน้าร้านได้เร็ว
+// Function: applySearch — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function applySearch() {
   const q = document.getElementById("searchBox").value.trim().toLowerCase();
   if (!q) return renderGrid(inStockItems);
@@ -90,6 +93,7 @@ function applySearch() {
 document.getElementById("searchBox").addEventListener("input", applySearch);
 
 // เปิดหน้ารายละเอียด: เป็นจุดกลางระหว่าง “ค้นหา” และ “ยืนยันการขาย”
+// Function: openItemSaleDetail — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function openItemSaleDetail(itemId) {
   const item = inStockItems.find((row) => row.id === itemId);
   if (!item) return;
@@ -109,14 +113,15 @@ async function openItemSaleDetail(itemId) {
   // โหลดประวัติการขายเฉพาะ Item นี้ เพื่อให้รู้ว่ามีรายการขายเดิมหรือไม่
   const { data: sales } = await supabaseClient
     .from("sales")
-    .select("id, sale_price, cost_price, payment_method, channel, sold_at, note")
+    .select("id, sale_price, cost_price, payment_method, channel, sale_date, note")
     .eq("item_id", item.id)
-    .order("sold_at", { ascending: false });
+    .order("sale_date", { ascending: false });
   renderSaleHistory(sales || []);
 
   document.getElementById("saleDetailModal").classList.remove("hidden");
 }
 
+// Function: renderSaleHistory — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderSaleHistory(sales) {
   const el = document.getElementById("saleHistory");
   if (!sales.length) {
@@ -126,7 +131,7 @@ function renderSaleHistory(sales) {
   el.innerHTML = sales.map((sale) => {
     const profit = Number(sale.sale_price || 0) - Number(sale.cost_price || 0);
     return `<div class="sale-history-row">
-      <div><b>${formatBaht(sale.sale_price)}</b><span>${formatDateTime(sale.sold_at)}</span></div>
+      <div><b>${formatBaht(sale.sale_price)}</b><span>${formatDateTime(sale.sale_date)}</span></div>
       <div><span>${paymentLabel(sale.payment_method)}</span><span>${channelLabel(sale.channel)}</span></div>
       <strong class="${profit >= 0 ? "profit" : "loss"}">${profit >= 0 ? "+" : ""}${formatBaht(profit)}</strong>
     </div>`;
@@ -134,6 +139,7 @@ function renderSaleHistory(sales) {
 }
 
 // จากรายละเอียด → เปิดฟอร์มขายจริง โดยใช้ current_price เป็นราคาเริ่มต้น
+// Function: openSellConfirm — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function openSellConfirm() {
   if (!selectedItem) return;
   document.getElementById("modalItemId").value = selectedItem.id;
@@ -143,6 +149,7 @@ function openSellConfirm() {
   document.getElementById("sellModal").classList.remove("hidden");
 }
 
+// Function: closeModal — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function closeModal(id) {
   document.getElementById(id)?.classList.add("hidden");
 }
@@ -196,19 +203,24 @@ document.getElementById("sellForm").addEventListener("submit", async (e) => {
   await loadSellGrid();
 });
 
+// Function: paymentLabel — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function paymentLabel(value) {
   return ({ cash: "เงินสด", transfer: "โอน", government: "โครงการรัฐ" })[value] || value || "-";
 }
+// Function: channelLabel — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function channelLabel(value) {
   return ({ street_market: "ถนนคนเดิน", facebook: "Facebook", instagram: "Instagram" })[value] || value || "-";
 }
+// Function: formatDateTime — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function formatDateTime(value) {
   if (!value) return "-";
   return new Date(value).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
 }
+// Function: escapeHtml — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
 }
+// Function: showToast — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showToast(msg) {
   const t = document.getElementById("toast");
   if (!t) return;
