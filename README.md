@@ -291,3 +291,10 @@ reports.html
 
 ### V9 database
 รัน `sql/migration_v9.sql` หลัง migration_v8 เพื่อเพิ่ม index สำหรับรายงาน
+
+
+## V10 — Supabase connection
+- `assets/js/supabaseClient.js` is configured with the user's Supabase Project URL.
+- The URL must be the project root, not `/rest/v1/`.
+- Storage bucket expected by the app: `item-images`.
+- For a fresh Supabase project, use `sql/schema.sql`; do not run incremental migrations v2-v9.
