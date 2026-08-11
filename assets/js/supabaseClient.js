@@ -9,6 +9,8 @@ const SUPABASE_URL = "https://cphhutlxvbinaycmsekm.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwaGh1dGx4dmJpbmF5Y21zZWttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyMTcyNzEsImV4cCI6MjEwMTc5MzI3MX0._8Qjqrnnlot6Lt5vGuQQg_PgfZ9YavBxLxMG22ctxvc";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// ให้โมดูล Realtime และสคริปต์หน้าอื่นเข้าถึง client ตัวเดียวกันได้
+window.supabaseClient = supabaseClient;
 
 // แปลง payment_method (english) <-> ป้ายที่แสดงผล (ไทย)
 const PAYMENT_LABELS = {

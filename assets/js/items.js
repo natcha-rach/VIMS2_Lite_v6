@@ -105,16 +105,49 @@ window.addEventListener('vims:realtime', (event) => {
 });
 
 
-async function loadLots() {
-  const { data, error } = await supabaseClient.from('lots').select('*').order('purchase_date', {ascending:false});
-  if (error) return showToast('โหลด Lot ไม่สำเร็จ: ' + error.message);
+async function loadLots(preferredLotId = null) {
+  // โหลดเฉพาะ field ที่หน้า Item ใช้จริง และเรียง Lot ล่าสุดก่อน
+  const { data, error } = await supabaseClient
+    .from('lots')
+    .select('id, lot_name, purchase_date, total_cost, total_items')
+    .order('purchase_date', { ascending: false });
+
+  const selects = ['lotSelect', 'bulkLot']
+    .map(id => $(id))
+    .filter(Boolean);
+
+  if (error) {
+    console.error('[Items] loadLots error:', error);
+    selects.forEach(el => {
+      el.innerHTML = '<option value="">โหลด Lot ไม่สำเร็จ</option>';
+    });
+    showToast('โหลด Lot ไม่สำเร็จ: ' + error.message);
+    return;
+  }
+
   allLots = data || [];
-  ['lotSelect','bulkLot'].forEach(id => {
-    const el = $(id); if (!el) return;
-    el.innerHTML = allLots.length ? allLots.map(l => `<option value="${l.id}">${escapeHtml(l.lot_name)}</option>`).join('') : '<option value="">-- ยังไม่มี Lot --</option>';
+
+  // ถ้าเปิดมาจาก Lots page ด้วย ?lot=ID ให้เลือก Lot นั้น
+  const urlLotId = new URLSearchParams(window.location.search).get('lot');
+  const currentLotId = preferredLotId || urlLotId || $('lotSelect')?.value || '';
+
+  selects.forEach(el => {
+    el.innerHTML = allLots.length
+      ? '<option value="">-- เลือก Lot --</option>' +
+        allLots.map(l =>
+          `<option value="${escapeHtml(l.id)}">${escapeHtml(l.lot_name || '(ไม่มีชื่อ Lot)')}</option>`
+        ).join('')
+      : '<option value="">-- ยังไม่มี Lot --</option>';
+
+    if (currentLotId && allLots.some(l => l.id === currentLotId)) {
+      el.value = currentLotId;
+    }
   });
-  await loadGroups();
+
+  const selectedLotId = $('lotSelect')?.value || currentLotId || '';
+  await loadGroups(selectedLotId);
   updateQuickStats();
+
   if (!bulkDraftPrompted) {
     bulkDraftPrompted = true;
     window.setTimeout(maybeOfferBulkDraft, 150);
@@ -306,7 +339,7 @@ async function renderItems(){
 async function updateQuickStats(){ const {data,error}=await supabaseClient.from('items').select('status,cost_price'); if(error)return; const rows=data||[]; const available=rows.filter(x=>x.status==='available'); const sold=rows.filter(x=>x.status==='sold'); const value=available.reduce((s,x)=>s+Number(x.cost_price||0),0); $('quickStats').innerHTML=`<div><span>สินค้าทั้งหมด</span><b>${rows.length}</b></div><div><span>พร้อมขาย</span><b>${available.length}</b></div><div><span>ขายแล้ว</span><b>${sold.length}</b></div><div><span>ต้นทุนคงเหลือ</span><b>${formatBaht(value)}</b></div>`; }
 function escapeHtml(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function showToast(msg){const t=$('toast');if(!t)return;t.textContent=msg;t.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),2600);}
-loadLots(); loadItems();
+loadLots(new URLSearchParams(window.location.search).get('lot')); loadItems();
 
 
 // ============================================================
