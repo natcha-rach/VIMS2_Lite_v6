@@ -5,11 +5,10 @@ let editingItemId = null;
 // เก็บสถานะการลงสินค้าแบบทีละตัวของ Bulk Receiving
 let bulkState = { lotId:null, group:null, index:0, rows:[], inserted:0, photoPairs:null };
 // เก็บรูปชั่วคราวของ Photo Queue ไว้ใน browser ก่อนบันทึกลง Supabase
-let photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{} };
+let photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{}, pairMode:'auto-single' };
 // เก็บแถว Bulk Table ชั่วคราว: ตารางนี้เป็น staging ก่อน insert เข้า Supabase
 let bulkTableState = { lotId:null, group:null, rows:[], source:'photo-queue' };
 let bulkDraftPrompted = false;
-    clearBulkDraft();
 
 const $ = (id) => document.getElementById(id);
 
@@ -164,6 +163,7 @@ $('itemForm')?.addEventListener('submit', async e => {
   const groupId = $('groupSelect').value || null;
   const group = allGroups.find(g => g.id === groupId);
   const payload = {
+    id: crypto.randomUUID(),
     lot_id: lotId, group_id: groupId, item_name: $('itemName').value.trim(), size: $('size').value.trim(),
     condition: $('condition').value, tier: $('tier').value, cost_price: Number($('costPrice').value || 0),
     base_price: group ? Number(group.base_price) : Number($('sellPrice').value || 0), current_price: Number($('sellPrice').value || 0), status:'available'
@@ -172,19 +172,67 @@ $('itemForm')?.addEventListener('submit', async e => {
   const files = Array.from($('singleImages').files || []).slice(0,2);
   const { data, error } = await supabaseClient.from('items').insert(payload).select().single();
   if (error) return showToast('บันทึกไม่สำเร็จ: ' + error.message);
-  if (files.length) await uploadItemImages(data.id, files);
+
+  try {
+    if (files.length) await uploadItemImages(data.id, files);
+  } catch (imageError) {
+    // ถ้ารูปบันทึกไม่ครบ ให้ลบ Item ที่เพิ่งสร้าง เพื่อไม่ให้เกิดสินค้าไร้รูปจากขั้นตอนเดียวกัน
+    await supabaseClient.from('items').delete().eq('id', data.id);
+    return showToast('บันทึกรูปไม่สำเร็จ จึงยกเลิก Item นี้: ' + imageError.message);
+  }
+
   showToast('เพิ่มสินค้าเรียบร้อย');
   $('itemForm').reset(); $('condition').value='A'; $('tier').value='normal'; $('lotSelect').value=lotId; await loadGroups(lotId); await loadItems();
 });
 
 async function uploadItemImages(itemId, files) {
-  for (let i=0; i<Math.min(files.length,2); i++) {
-    const file=files[i]; const ext=(file.name.split('.').pop()||'jpg').toLowerCase(); const path=`${itemId}/${crypto.randomUUID()}.${ext}`;
-    const { error: upErr } = await supabaseClient.storage.from('item-images').upload(path,file,{upsert:false,contentType:file.type});
-    if (upErr) { console.error(upErr); showToast('อัปโหลดรูปบางรูปไม่สำเร็จ'); continue; }
-    const { data:urlData } = supabaseClient.storage.from('item-images').getPublicUrl(path);
-    await supabaseClient.from('item_images').upsert({item_id:itemId,image_url:urlData.publicUrl,storage_path:path,sort_order:i+1},{onConflict:'item_id,sort_order'});
+  // จำกัดรูปต่อ Item ไว้ที่ 2 รูปตาม Database Contract: sort_order 1/2
+  const safeFiles = Array.from(files || []).slice(0, 2);
+  const uploadedPaths = [];
+
+  for (let i = 0; i < safeFiles.length; i++) {
+    const file = safeFiles[i];
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${itemId}/${crypto.randomUUID()}.${ext}`;
+
+    // 1) Upload binary file ไป Supabase Storage
+    const { error: upErr } = await supabaseClient
+      .storage
+      .from('item-images')
+      .upload(path, file, { upsert: false, contentType: file.type });
+
+    if (upErr) {
+      // ถ้า Upload ไม่สำเร็จ ให้ส่ง error กลับไปให้ caller ตัดสินใจ rollback
+      throw new Error(`อัปโหลดรูป ${i + 1} ไม่สำเร็จ: ${upErr.message}`);
+    }
+
+    uploadedPaths.push(path);
+
+    // 2) สร้าง Public URL สำหรับแสดงรูปใน UI
+    const { data: urlData } = supabaseClient
+      .storage
+      .from('item-images')
+      .getPublicUrl(path);
+
+    // 3) ผูกไฟล์กับ Item ใน item_images
+    const { error: imageRowError } = await supabaseClient
+      .from('item_images')
+      .insert({
+        item_id: itemId,
+        image_url: urlData.publicUrl,
+        storage_path: path,
+        sort_order: i + 1
+      });
+
+    if (imageRowError) {
+      // ลบไฟล์ที่เพิ่ง upload ถ้าสร้าง row ไม่สำเร็จ เพื่อไม่ให้ Storage มี orphan file
+      await supabaseClient.storage.from('item-images').remove([path]);
+      throw new Error(`บันทึกข้อมูลรูป ${i + 1} ไม่สำเร็จ: ${imageRowError.message}`);
+    }
   }
+
+  // คืน path ให้ caller ใช้ cleanup ได้ถ้าขั้นตอนถัดไปล้มเหลว
+  return uploadedPaths;
 }
 
 $('openBulk')?.addEventListener('click', async () => { $('bulkModal').classList.remove('hidden'); $('bulkLot').value=$('lotSelect').value; await loadGroups($('bulkLot').value); showBulkStep(1); });
@@ -218,7 +266,13 @@ $('quickEntryForm')?.addEventListener('submit', async e=>{
   const payload={lot_id:bulkState.lotId,group_id:bulkState.group.id,item_name:$('bulkName').value.trim(),size:$('bulkSize').value.trim(),condition:$('bulkCondition').value,tier:$('bulkTier').value,cost_price:Number($('bulkCost').value||0),base_price:Number(bulkState.group.base_price||0),current_price:Number($('bulkPrice').value||0),status:'available'};
   if(!payload.item_name) return showToast('กรุณาใส่ชื่อสินค้า');
   const {data,error}=await supabaseClient.from('items').insert(payload).select().single(); if(error) return showToast('บันทึกไม่สำเร็จ: '+error.message);
-  await uploadItemImages(data.id,files); bulkState.rows[bulkState.index]=data; bulkState.inserted++; bulkState.index++;
+  try {
+    await uploadItemImages(data.id,files);
+  } catch (imageError) {
+    await supabaseClient.from('items').delete().eq('id', data.id);
+    return showToast('อัปโหลดรูปไม่สำเร็จ จึงยกเลิก Item นี้: ' + imageError.message);
+  }
+  bulkState.rows[bulkState.index]=data; bulkState.inserted++; bulkState.index++;
   if(bulkState.index>=bulkState.rows.length){ $('bulkSummary').innerHTML=`<div class="success-box">✓ ลงกลุ่ม <b>${escapeHtml(bulkState.group.group_name)}</b> ครบ ${bulkState.inserted} รายการแล้ว</div>`; showBulkStep(3); }
   else if(bulkState.photoPairs){ await prepareQueuedItem(bulkState.index); }
   else { $('quickEntryForm').reset(); $('bulkCondition').value='A'; $('bulkTier').value=bulkState.group.tier; $('bulkCost').value=await getLotAvgCost(bulkState.lotId); $('bulkPrice').value=bulkState.group.base_price; $('photoPreview').innerHTML='<span>📷</span><small>เลือก 1–2 รูป</small>'; renderBulkProgress(); $('bulkName').focus(); }
@@ -266,11 +320,12 @@ async function openPhotoQueue(groupId) {
   // ถ้าไม่พบ Group ให้หยุด
   if (!group) return showToast('ไม่พบกลุ่ม');
   // reset state ของ Photo Queue ทุกครั้งที่เริ่มกองใหม่
-  photoQueueState = { lotId: group.lot_id, group, itemCount: 20, files: [], roles: {} };
+  photoQueueState = { lotId: group.lot_id, group, itemCount: 20, files: [], roles: {}, pairMode:'auto-single' };
   // แสดงชื่อ Group ใน modal
   $('photoQueueGroup').innerHTML = `<option value="${group.id}">${escapeHtml(group.group_name)}</option>`;
   // ใส่ค่า default จำนวนสินค้า
   $('photoQueueItemCount').value = 20;
+  $('photoQueuePairMode').value = 'auto-single';
   // ล้าง input รูปเก่า
   $('photoQueueInput').value = '';
   // เปิด panel
@@ -282,7 +337,7 @@ async function openPhotoQueue(groupId) {
 // ปิด Photo Queue โดยไม่เขียนข้อมูลลงฐานข้อมูล
 function closePhotoQueue() {
   $('photoQueuePanel').classList.add('hidden');
-  photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{} };
+  photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{}, pairMode:'auto-single' };
 }
 
 // ปุ่มปิด/ยกเลิก Photo Queue
@@ -296,6 +351,15 @@ $('photoQueueItemCount')?.addEventListener('change', () => {
   // ถ้า role บางตัวชี้ไป Item ที่เกินจำนวนใหม่ ให้ลบ role นั้น
   Object.keys(photoQueueState.roles).forEach((key) => { if (photoQueueState.roles[key] > photoQueueState.itemCount) delete photoQueueState.roles[key]; });
   // render ใหม่
+  renderPhotoQueue();
+});
+
+// เลือกวิธีจับคู่รูปเพื่อให้เหมาะกับงานจริงของร้าน
+// auto-single = รูป 1 รูป/สินค้า, เรียงตามชื่อไฟล์
+// auto-pair = รูป 2 รูป/สินค้า, จับ 1-2, 3-4, 5-6 ...
+// manual = ผสม 1/2 รูป และกำหนดรูปที่ 2 เอง
+$('photoQueuePairMode')?.addEventListener('change', () => {
+  photoQueueState.pairMode = $('photoQueuePairMode').value || 'auto-single';
   renderPhotoQueue();
 });
 
@@ -354,22 +418,34 @@ function renderPhotoQueue() {
 
 // สร้างคู่รูป [primary, secondary] สำหรับ Item 1..N จาก staging ใน Photo Queue
 function buildPhotoPairsFromQueue() {
-  // สร้าง array ของ Item ตามจำนวนที่ผู้ใช้กำหนด
-  const pairs = Array.from({ length: photoQueueState.itemCount }, () => [null, null]);
-  // รูปที่ไม่ได้กำหนดเป็นรูปที่ 2 จะถูกจับเป็นรูปหลักตามลำดับ filename
-  const primaryFiles = photoQueueState.files.filter((_, index) => !photoQueueState.roles[index]);
-  // ตรวจว่ารูปหลักพอสำหรับจำนวนสินค้าไหม
-  if (primaryFiles.length < photoQueueState.itemCount) return null;
-  // จับรูปหลักให้ Item 1..N
-  primaryFiles.slice(0, photoQueueState.itemCount).forEach((file, index) => { pairs[index][0] = file; });
-  // รูปที่กำหนดเป็นรูปที่ 2 จะถูกผูกตาม Item ที่เลือกใน dropdown
+  const count = photoQueueState.itemCount;
+  const files = photoQueueState.files;
+  const mode = photoQueueState.pairMode || 'auto-single';
+  const pairs = Array.from({ length: count }, () => [null, null]);
+
+  if (mode === 'auto-single') {
+    if (files.length < count) return null;
+    files.slice(0, count).forEach((file, index) => { pairs[index][0] = file; });
+    return pairs;
+  }
+
+  if (mode === 'auto-pair') {
+    if (files.length < count * 2) return null;
+    for (let index = 0; index < count; index++) {
+      pairs[index][0] = files[index * 2];
+      pairs[index][1] = files[index * 2 + 1];
+    }
+    return pairs;
+  }
+
+  // Manual: รูปที่ไม่ได้กำหนดเป็นรูปที่ 2 จะถูกใช้เป็นรูปหลักตามลำดับ filename
+  const primaryFiles = files.filter((_, index) => !photoQueueState.roles[index]);
+  if (primaryFiles.length < count) return null;
+  primaryFiles.slice(0, count).forEach((file, index) => { pairs[index][0] = file; });
   Object.entries(photoQueueState.roles).forEach(([fileIndex, itemNumber]) => {
-    // itemNumber เป็น 1-based จึงต้องลบ 1 ก่อนเข้ array
     const itemIndex = Number(itemNumber) - 1;
-    // ใส่รูปที่ 2 เฉพาะถ้า Item อยู่ในช่วงที่ถูกต้อง
-    if (pairs[itemIndex]) pairs[itemIndex][1] = photoQueueState.files[Number(fileIndex)];
+    if (pairs[itemIndex]) pairs[itemIndex][1] = files[Number(fileIndex)];
   });
-  // คืนคู่รูปทั้งหมดให้ Bulk Entry
   return pairs;
 }
 
@@ -660,6 +736,7 @@ $('saveBulkTable')?.addEventListener('click', async () => {
   try {
     // สร้าง payload ของ Items ทั้งกอง; ยังไม่มี image_url เพราะรูปอยู่ใน Storage แยกตาราง
     const payload = rows.map(row => ({
+      id: crypto.randomUUID(),
       lot_id: bulkTableState.lotId,
       group_id: group.id,
       item_name: String(row.item_name).trim(),
@@ -677,11 +754,26 @@ $('saveBulkTable')?.addEventListener('click', async () => {
     if (!inserted || inserted.length !== rows.length) throw new Error('Supabase คืนจำนวน Item ไม่ครบ');
     // จับคู่ Item ที่ Supabase คืนมากับ staging row ตามลำดับ insert
     // จากนั้น upload รูปของแต่ละ Item พร้อมกันทีละ 4 งาน เพื่อลดการยิง request 200 ชุดพร้อมกัน
-    for (let i = 0; i < rows.length; i += 4) {
-      const chunk = rows.slice(i, i + 4).map((row, offset) => ({ row, item: inserted[i + offset] }));
-      await Promise.all(chunk.map(async ({ row, item }) => uploadItemImages(item.id, row.files)));
-      showToast(`อัปโหลดรูป ${Math.min(i + 4, rows.length)}/${rows.length}`);
+    const uploadedByItem = new Map();
+
+    try {
+      for (let i = 0; i < rows.length; i += 4) {
+        const chunk = rows.slice(i, i + 4).map((row, offset) => ({ row, item: inserted[i + offset] }));
+        await Promise.all(chunk.map(async ({ row, item }) => {
+          const paths = await uploadItemImages(item.id, row.files);
+          uploadedByItem.set(item.id, paths);
+        }));
+        showToast(`อัปโหลดรูป ${Math.min(i + 4, rows.length)}/${rows.length}`);
+      }
+    } catch (imageError) {
+      // Bulk insert สำเร็จแล้วแต่รูปบางรายการล้มเหลว:
+      // ลบไฟล์ที่ upload สำเร็จ + ลบ Items ทั้งกอง เพื่อไม่ให้เกิดข้อมูลค้างครึ่งกอง
+      const paths = Array.from(uploadedByItem.values()).flat();
+      if (paths.length) await supabaseClient.storage.from('item-images').remove(paths);
+      await supabaseClient.from('items').delete().in('id', inserted.map(item => item.id));
+      throw new Error(`อัปโหลดรูปไม่ครบ จึง rollback สินค้าทั้งกอง: ${imageError.message}`);
     }
+
     // ล้าง staging หลังบันทึกสำเร็จ เพื่อไม่ให้ข้อมูลเก่าค้างอยู่ใน browser
     bulkTableState = { lotId:null, group:null, rows:[], source:'photo-queue' };
     clearBulkDraft();

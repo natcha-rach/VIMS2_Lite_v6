@@ -193,14 +193,9 @@ document.getElementById("sellForm").addEventListener("submit", async (e) => {
   closeModal("sellModal");
   selectedItem = null;
   showToast(`ขาย “${item.item_name}” สำเร็จ`);
-  await
-// Realtime: ถ้ามีเครื่องอื่นขาย/แก้ Item หน้านี้จะโหลดสต็อกใหม่ทันที
-window.addEventListener('vims:realtime', (event) => {
-  const table = event.detail?.table;
-  if (['items', 'item_images', 'sales'].includes(table)) loadSellGrid();
-});
 
-loadSellGrid();
+  // หลังขายสำเร็จ โหลด Stock ใหม่ทันทีบนเครื่องที่กดขาย
+  await loadSellGrid();
 });
 
 function paymentLabel(value) {
@@ -226,10 +221,23 @@ function showToast(msg) {
 }
 
 
-// Realtime: ถ้ามีเครื่องอื่นขาย/แก้ Item หน้านี้จะโหลดสต็อกใหม่ทันที
+
+// ==========================================================
+// REALTIME — SELL PAGE
+// ==========================================================
+// ถ้า Device อื่นเพิ่ม/ขาย/แก้ Item หรือรูป:
+//   Supabase Realtime
+//      ↓
+//   vims:realtime
+//      ↓
+//   โหลด Stock Grid ใหม่
+// ==========================================================
 window.addEventListener('vims:realtime', (event) => {
   const table = event.detail?.table;
-  if (['items', 'item_images', 'sales'].includes(table)) loadSellGrid();
+  if (['items', 'item_images', 'sales'].includes(table)) {
+    loadSellGrid();
+  }
 });
 
+// โหลด Stock ครั้งแรกเมื่อเปิดหน้า Sell
 loadSellGrid();

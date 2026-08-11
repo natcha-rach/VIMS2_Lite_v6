@@ -36,3 +36,11 @@ Supabase Realtime ติดตาม `lots`, `lot_groups`, `items`, `item_images
 ## Draft
 
 Bulk Table metadata ถูกเก็บใน `localStorage`. File object ของรูปเก็บข้าม refresh ไม่ได้ จึงต้องเลือกรูปใหม่หลัง Resume
+
+
+## V10.1.1 safety fixes
+
+- `sell.js`: Realtime listener ถูกประกาศเพียงครั้งเดียวหลัง page setup; ไม่สร้าง listener ซ้ำทุกครั้งที่ขาย
+- `items.js`: การ upload รูปจะ throw เมื่อ Storage หรือ `item_images` insert ล้มเหลว
+- Single Item: ถ้า upload รูปล้มเหลว Item ที่เพิ่งสร้างจะถูกลบออก
+- Bulk: ถ้า upload รูปกอง 200 ล้มเหลว จะ cleanup รูปที่ upload แล้วและลบ Items ที่เพิ่ง insert ทั้งกอง
