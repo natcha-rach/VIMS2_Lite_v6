@@ -1,9 +1,5 @@
-/* ==========================================================
-   STUDY NOTE — อ่าน file นี้โดยไล่จาก function ตาม comment “Function:”
-   ทุก function จะบอกหน้าที่และจุดเชื่อมต่อกับ UI / Supabase / ไฟล์อื่น
-   ========================================================== */
-
 let dashboardRows = null;
+// Cache นี้ถูก invalidate เมื่อข้อมูลจาก Device อื่นเปลี่ยน เพื่อให้ Dashboard สะท้อนยอดล่าสุด
 let activeRange = "today";
 const $ = (id) => document.getElementById(id);
 
@@ -11,11 +7,8 @@ const CHANNEL_LABELS = { street_market: "ถนนคนเดิน", facebook:
 const TIER_LABELS = { normal: "ปกติ", head: "งานหัว / Premium" };
 
 function escapeHtml(v = "") { return String(v).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])); }
-// Function: startOfDay — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-// Function: dateKey — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function dateKey(d) { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`; }
-// Function: rangeFromPreset — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function rangeFromPreset(preset) {
   const now = new Date(); const end = startOfDay(now); let start = new Date(end);
   if (preset === "7d") start.setDate(start.getDate()-6);
@@ -25,20 +18,15 @@ function rangeFromPreset(preset) {
   else if (preset === "all") start = new Date(2000, 0, 1);
   return { start, end: new Date(end.getTime()+86399999) };
 }
-// Function: rangeFromCustom — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function rangeFromCustom() {
   const f = $("fromDate").value, t = $("toDate").value; if (!f || !t) return null;
   const start = new Date(`${f}T00:00:00`), end = new Date(`${t}T23:59:59`);
   return end < start ? null : { start, end };
 }
-// Function: inRange — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function inRange(value, range) { const d = new Date(value); return d >= range.start && d <= range.end; }
-// Function: sum — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function sum(arr, fn) { return arr.reduce((a,x) => a + Number(fn(x) || 0), 0); }
-// Function: percent — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function percent(a,b) { return b ? (a/b)*100 : 0; }
 
-// Function: fetchDashboardData — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function fetchDashboardData() {
   const [lotsR, groupsR, itemsR, salesR, expensesR] = await Promise.all([
     supabaseClient.from("lots").select("id,lot_name,purchase_date,total_cost,total_items"),
@@ -52,7 +40,6 @@ async function fetchDashboardData() {
   return { lots: lotsR.data || [], groups: groupsR.data || [], items: itemsR.data || [], sales: salesR.data || [], expenses: expensesR.data || [] };
 }
 
-// Function: renderDashboard — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderDashboard(data, range) {
   const { lots, groups, items, sales, expenses } = data;
   const periodSales = sales.filter(s => inRange(s.sale_date, range));
@@ -136,22 +123,27 @@ function renderDashboard(data, range) {
 }
 
 
-// Function: loadDashboard — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadDashboard(range) {
-  // ถ้า Realtime เรียกโดยไม่มี range ให้คงช่วงเวลาที่ผู้ใช้เลือกอยู่ ไม่เด้งกลับไปวันนี้
-  range ||= rangeFromPreset(activeRange);
   try {
     dashboardRows ||= await fetchDashboardData();
     renderDashboard(dashboardRows, range);
   } catch (err) { console.error(err); showToast("โหลด Dashboard ไม่สำเร็จ: " + (err.message || err)); }
 }
 
-// Function: setPeriod — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function setPeriod(preset) {
   activeRange = preset; document.querySelectorAll(".period-btn").forEach(b=>b.classList.toggle("active",b.dataset.period===preset)); loadDashboard(rangeFromPreset(preset));
 }
 document.querySelectorAll(".period-btn").forEach(btn=>btn.addEventListener("click",()=>setPeriod(btn.dataset.period)));
 $("applyCustom").addEventListener("click",()=>{ const range=rangeFromCustom(); if(!range)return showToast("กรุณาเลือกช่วงวันที่ให้ถูกต้อง"); document.querySelectorAll(".period-btn").forEach(b=>b.classList.remove("active")); loadDashboard(range); });
-// Function: showToast — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showToast(m){const t=$("toast");if(!t)return;t.textContent=m;t.classList.add("show");clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove("show"),2600)}
+
+// Realtime: Dashboard ต้องดึงข้อมูลใหม่เมื่อ Lot / Item / Sale / Expense เปลี่ยนจาก Device อื่น
+window.addEventListener('vims:realtime', (event) => {
+  const table = event.detail?.table;
+  if (['lots', 'lot_groups', 'items', 'sales', 'expenses'].includes(table)) {
+    dashboardRows = null;
+    loadDashboard(rangeFromPreset(activeRange));
+  }
+});
+
 setPeriod("today");

@@ -5,21 +5,16 @@
    หน้านี้เป็น read-only report: ไม่แก้ข้อมูลธุรกรรมโดยตรง
    ========================================================== */
 const CHANNEL_LABELS = { street_market: "ถนนคนเดิน", facebook: "Facebook", instagram: "Instagram" };
-// Function: escapeHtml — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function escapeHtml(v="") { return String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c])); }
 const TIER_LABELS = { normal: "ปกติ", head: "งานหัว / Premium" };
 const today = new Date();
 let currentPeriod = "day";
 
-// Function: formatBaht — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function formatBaht(value) {
   return new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB", maximumFractionDigits: 0 }).format(Number(value || 0));
 }
-// Function: formatDate — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function formatDate(value) { return new Intl.DateTimeFormat("th-TH", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
-// Function: showToast — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showToast(msg) { const t=document.getElementById("toast"); if(!t)return; t.textContent=msg; t.classList.add("show"); setTimeout(()=>t.classList.remove("show"),2500); }
-// Function: percent — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function percent(a,b) { return b ? (a/b)*100 : 0; }
 
 /* ---------- ตั้งค่า date/month/year selector ---------- */
@@ -42,14 +37,12 @@ document.querySelectorAll(".period-tab").forEach(tab=>tab.addEventListener("clic
 pickDate.addEventListener("change",loadReport); pickMonth.addEventListener("change",loadReport); yearSelect.addEventListener("change",loadReport);
 
 /* ---------- คำนวณช่วงเวลา ---------- */
-// Function: getMainRange — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function getMainRange() {
   if (currentPeriod === "day") { const d=pickDate.valueAsDate||today; const start=new Date(d.getFullYear(),d.getMonth(),d.getDate()); const end=new Date(start); end.setDate(end.getDate()+1); return {start,end}; }
   if (currentPeriod === "month") { const [y,m]=pickMonth.value.split("-").map(Number); return {start:new Date(y,m-1,1),end:new Date(y,m,1)}; }
   const y=Number(yearSelect.value); return {start:new Date(y,0,1),end:new Date(y+1,0,1)};
 }
 
-// Function: loadReport — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadReport() {
   const {start,end}=getMainRange();
   try {
@@ -66,46 +59,38 @@ async function loadReport() {
   } catch(err) { console.error(err); showToast("โหลดรายงานไม่สำเร็จ: "+(err.message||err)); }
 }
 
-// Function: renderStats — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderStats(sales,expenses) {
   const revenue=sales.reduce((a,s)=>a+Number(s.sale_price||0),0); const cost=sales.reduce((a,s)=>a+Number(s.cost_price||0),0); const profit=revenue-cost; const expenseTotal=expenses.reduce((a,e)=>a+Number(e.amount||0),0); const net=profit-expenseTotal;
   document.getElementById("repRevenue").textContent=formatBaht(revenue); document.getElementById("repCost").textContent=formatBaht(cost); document.getElementById("repCount").textContent=`${sales.length} ชิ้น`; document.getElementById("repProfit").textContent=formatBaht(profit); document.getElementById("repExpenses").textContent=formatBaht(expenseTotal); document.getElementById("repNetProfit").textContent=formatBaht(net);
   ["repProfit","repNetProfit"].forEach(id=>{const el=document.getElementById(id);el.classList.remove("profit","loss");el.classList.add(Number(id==="repProfit"?profit:net)>=0?"profit":"loss");});
 }
-// Function: renderPaymentBreakdown — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderPaymentBreakdown(sales) {
   const by={}; sales.forEach(s=>{by[s.payment_method] ||= {count:0,total:0};by[s.payment_method].count++;by[s.payment_method].total+=Number(s.sale_price||0);});
   const rows=Object.keys(by).length?Object.entries(by).map(([k,v])=>`<tr><td>${PAYMENT_LABELS[k]||k}</td><td style="text-align:right">${v.count}</td><td style="text-align:right">${formatBaht(v.total)}</td></tr>`).join(""):"<tr><td colspan=3 class=empty-state>ไม่มีรายการขาย</td></tr>";
   document.getElementById("repPaymentBreakdown").innerHTML=rows;
 }
-// Function: renderChannelBreakdown — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderChannelBreakdown(sales) {
   const by={}; sales.forEach(s=>{const k=s.channel||"other";by[k] ||= {count:0,revenue:0,profit:0};by[k].count++;by[k].revenue+=Number(s.sale_price||0);by[k].profit+=Number(s.sale_price||0)-Number(s.cost_price||0);});
   document.getElementById("repChannelBreakdown").innerHTML=Object.keys(by).length?Object.entries(by).sort((a,b)=>b[1].revenue-a[1].revenue).map(([k,v])=>`<tr><td>${CHANNEL_LABELS[k]||k}</td><td style="text-align:right">${v.count}</td><td style="text-align:right">${formatBaht(v.revenue)}</td><td style="text-align:right" class="${v.profit>=0?'profit':'loss'}">${formatBaht(v.profit)}</td></tr>`).join(""):"<tr><td colspan=4 class=empty-state>ไม่มีรายการขาย</td></tr>";
 }
-// Function: renderTierBreakdown — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderTierBreakdown(sales,items) {
   const by={normal:{count:0,revenue:0,profit:0},head:{count:0,revenue:0,profit:0}}; const map=Object.fromEntries(items.map(i=>[i.id,i]));
   sales.forEach(s=>{const k=map[s.item_id]?.tier==="head"?"head":"normal";by[k].count++;by[k].revenue+=Number(s.sale_price||0);by[k].profit+=Number(s.sale_price||0)-Number(s.cost_price||0);});
   document.getElementById("repTierBreakdown").innerHTML=Object.entries(by).map(([k,v])=>`<tr><td>${TIER_LABELS[k]}</td><td style="text-align:right">${v.count}</td><td style="text-align:right">${formatBaht(v.revenue)}</td><td style="text-align:right" class="${v.profit>=0?'profit':'loss'}">${formatBaht(v.profit)}</td></tr>`).join("");
 }
-// Function: renderLotBreakdown — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderLotBreakdown(sales,items,lots) {
   const map=Object.fromEntries(items.map(i=>[i.id,i])); const by=Object.fromEntries(lots.map(l=>[l.id,{lot:l,sold:0,revenue:0,profit:0}]));
   sales.forEach(s=>{const i=map[s.item_id],r=i&&by[i.lot_id];if(!r)return;r.sold++;r.revenue+=Number(s.sale_price||0);r.profit+=Number(s.sale_price||0)-Number(s.cost_price||0);});
   const rows=Object.values(by).filter(x=>x.sold).sort((a,b)=>b.profit-a.profit); document.getElementById("repLotBreakdown").innerHTML=rows.length?rows.map(x=>`<tr><td><b>${x.lot.lot_name}</b><small class="table-sub">${x.lot.total_items} ชิ้น · ${x.sold} ขาย</small></td><td style="text-align:right">${formatBaht(x.lot.total_cost)}</td><td style="text-align:right">${x.sold}</td><td style="text-align:right">${formatBaht(x.revenue)}</td><td style="text-align:right" class="${x.profit>=0?'profit':'loss'}">${formatBaht(x.profit)}</td><td style="text-align:right">${percent(x.profit,x.lot.total_cost).toFixed(1)}%</td></tr>`).join(""):"<tr><td colspan=6 class=empty-state>ไม่มีรายการขาย</td></tr>";
 }
-// Function: renderWeekendBreakdown — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderWeekendBreakdown(sales) {
   const by={6:{label:"เสาร์",count:0,revenue:0,profit:0},0:{label:"อาทิตย์",count:0,revenue:0,profit:0}};
   sales.filter(s=>s.channel==="street_market").forEach(s=>{const k=new Date(s.sale_date).getDay();if(!by[k])return;by[k].count++;by[k].revenue+=Number(s.sale_price||0);by[k].profit+=Number(s.sale_price||0)-Number(s.cost_price||0);});
   document.getElementById("repWeekendBreakdown").innerHTML=[6,0].map(k=>{const v=by[k];return `<div class="weekend-report-card"><span>${v.label}</span><b>${formatBaht(v.revenue)}</b><small>${v.count} ชิ้น · กำไร ${formatBaht(v.profit)}</small></div>`;}).join("");
 }
-// Function: renderSaleList — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderSaleList(sales) {
   document.getElementById("repSaleList").innerHTML=sales.length?sales.map(s=>`<div class="sale-row"><div><div class="sale-name">${escapeHtml(s.items?.item_name||"สินค้า")}</div><div class="sale-meta">${formatDate(s.sale_date)} · ${PAYMENT_LABELS[s.payment_method]||s.payment_method} · ${CHANNEL_LABELS[s.channel]||s.channel||"-"}</div></div><div class="sale-price">${formatBaht(s.sale_price)}</div></div>`).join(""):"<div class=empty-state>ไม่มีรายการขายในช่วงนี้</div>";
 }
-// Function: renderTrend — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function renderTrend(start,end) {
   const title=document.getElementById("repTrendTitle"),col=document.getElementById("repTrendCol1"); let trendStart=new Date(start),trendEnd=new Date(end),labelFn;
   if(currentPeriod==="day"){title.textContent="แนวโน้ม 7 วันล่าสุด";col.textContent="วันที่";trendStart.setDate(trendStart.getDate()-6);labelFn=d=>formatDate(d).split(" ").slice(0,2).join(" ");}
@@ -117,3 +102,8 @@ async function renderTrend(start,end) {
 }
 
 loadReport();
+
+// Realtime: รายงานจะโหลดข้อมูลใหม่เมื่อยอดขาย/ค่าใช้จ่าย/สินค้าเปลี่ยนจาก Device อื่น
+window.addEventListener('vims:realtime', (event) => {
+  if (['sales', 'expenses', 'items', 'lots'].includes(event.detail?.table)) loadReport();
+});

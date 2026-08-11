@@ -1,8 +1,3 @@
-/* ==========================================================
-   STUDY NOTE — อ่าน file นี้โดยไล่จาก function ตาม comment “Function:”
-   ทุก function จะบอกหน้าที่และจุดเชื่อมต่อกับ UI / Supabase / ไฟล์อื่น
-   ========================================================== */
-
 let editingExpenseId = null;
 let expensesCache = [];
 let baseAmountTouched = false;
@@ -18,7 +13,6 @@ const pctInputs = {
 };
 const bucketBaseAmountEl = document.getElementById("bucketBaseAmount");
 
-// Function: loadBucketSettings — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadBucketSettings() {
   const { data, error } = await supabaseClient
     .from("app_settings")
@@ -61,7 +55,6 @@ document.getElementById("bucketForm").addEventListener("submit", async (e) => {
   showToast("บันทึกเปอร์เซ็นต์การแบ่งถังเงินเรียบร้อย ครั้งหน้าจะใช้ค่านี้ทันที");
 });
 
-// Function: recalcBuckets — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function recalcBuckets() {
   const pctCost = Number(pctInputs.cost.value) || 0;
   const pctDebt = Number(pctInputs.debt.value) || 0;
@@ -124,7 +117,6 @@ document.getElementById("expenseForm").addEventListener("submit", async (e) => {
 
 document.getElementById("cancelExpenseEdit").addEventListener("click", exitEditMode);
 
-// Function: exitEditMode — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function exitEditMode() {
   editingExpenseId = null;
   document.getElementById("expenseForm").reset();
@@ -133,7 +125,6 @@ function exitEditMode() {
   document.getElementById("cancelExpenseEdit").classList.add("hidden");
 }
 
-// Function: enterEditMode — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function enterEditMode(expense) {
   editingExpenseId = expense.id;
   document.getElementById("expenseDate").value = expense.expense_date;
@@ -145,7 +136,6 @@ function enterEditMode(expense) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-// Function: handleDeleteExpense — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function handleDeleteExpense(id) {
   const ok = confirm("ลบรายการค่าใช้จ่ายนี้ใช่ไหม?");
   if (!ok) return;
@@ -161,7 +151,6 @@ async function handleDeleteExpense(id) {
   loadAll();
 }
 
-// Function: renderExpenseList — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderExpenseList() {
   if (!expensesCache.length) {
     document.getElementById("expenseList").innerHTML = `<div class="empty-state">ยังไม่มีรายการค่าใช้จ่าย</div>`;
@@ -204,7 +193,6 @@ function renderExpenseList() {
 /* ---------- โหลดข้อมูลทั้งหมด + คำนวณสรุป + สมุดบัญชี ---------- */
 let ledgerRowsForExport = [];
 
-// Function: loadAll — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadAll() {
   const [{ data: lots, error: lotsErr }, { data: expenses, error: expErr }, { data: sales, error: salesErr }] =
     await Promise.all([
@@ -252,7 +240,6 @@ async function loadAll() {
   renderLedger(lots, expenses, sales);
 }
 
-// Function: renderLedger — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderLedger(lots, expenses, sales) {
   const events = [];
 
@@ -343,7 +330,6 @@ document.getElementById("exportCsvBtn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
-// Function: showToast — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showToast(msg) {
   const t = document.getElementById("toast");
   if (!t) return;
@@ -354,3 +340,8 @@ function showToast(msg) {
 
 loadAll();
 loadBucketSettings();
+
+// Realtime: บัญชีสะท้อนค่าใช้จ่าย/ยอดขาย/Lot ที่เปลี่ยนจาก Device อื่น
+window.addEventListener('vims:realtime', (event) => {
+  if (['expenses', 'sales', 'lots'].includes(event.detail?.table)) loadAll();
+});

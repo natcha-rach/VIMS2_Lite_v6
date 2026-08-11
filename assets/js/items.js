@@ -1,8 +1,3 @@
-/* ==========================================================
-   STUDY NOTE — อ่าน file นี้โดยไล่จาก function ตาม comment “Function:”
-   ทุก function จะบอกหน้าที่และจุดเชื่อมต่อกับ UI / Supabase / ไฟล์อื่น
-   ========================================================== */
-
 let allLots = [];
 let allGroups = [];
 let itemsCache = [];
@@ -13,74 +8,104 @@ let bulkState = { lotId:null, group:null, index:0, rows:[], inserted:0, photoPai
 let photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{} };
 // เก็บแถว Bulk Table ชั่วคราว: ตารางนี้เป็น staging ก่อน insert เข้า Supabase
 let bulkTableState = { lotId:null, group:null, rows:[], source:'photo-queue' };
+let bulkDraftPrompted = false;
+    clearBulkDraft();
 
+const $ = (id) => document.getElementById(id);
 
 // ============================================================
-// BULK DRAFT — เก็บข้อมูล staging ในเครื่องเพื่อกลับมาทำต่อได้
-// หมายเหตุ: browser ไม่อนุญาตให้ localStorage เก็บ File object ของรูป
-// ดังนั้นเราจะเก็บข้อมูลตาราง + ชื่อรูปไว้ แต่ผู้ใช้ต้องเลือกรูปใหม่ถ้าปิด/refresh หน้า
+// BULK DRAFT — บันทึกข้อมูลตัวอักษรไว้ใน Browser เพื่อ Resume
 // ============================================================
-const BULK_DRAFT_KEY = 'vims2_bulk_draft_v10';
+// ข้อจำกัดของ Browser:
+//   File object ของรูปไม่สามารถเก็บลง localStorage ได้
+//   ดังนั้น Draft จะเก็บเฉพาะข้อมูลตาราง/จำนวนแถว
+//   ส่วนรูปจะต้องเลือกใหม่หลัง Refresh
+const BULK_DRAFT_KEY = 'vims2_bulk_draft_v10_1';
 
-// แปลง Bulk Table เป็นข้อมูลที่ localStorage เก็บได้ โดยตัด File object ออก
-// Function: serializeBulkDraft — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
-function serializeBulkDraft() {
-  const groupId = bulkTableState.group?.id || null;
-  return {
-    lotId: bulkTableState.lotId || null,
-    groupId,
-    source: bulkTableState.source || 'photo-queue',
-    savedAt: new Date().toISOString(),
-    rows: (bulkTableState.rows || []).map(row => ({
-      item_name: row.item_name || '', size: row.size || '', condition: row.condition || 'A',
-      tier: row.tier || 'normal', price: Number(row.price || 0), cost: Number(row.cost || 0),
-      fileNames: (row.files || []).map(file => file.name)
-    }))
-  };
-}
-
-// บันทึก Draft ปัจจุบันลง browser เพื่อป้องกันการเสียเวลาจาก refresh/ปิดแท็บโดยไม่ตั้งใจ
-// Function: saveBulkDraft — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function saveBulkDraft() {
-  if (!bulkTableState.rows?.length) return;
-  localStorage.setItem(BULK_DRAFT_KEY, JSON.stringify(serializeBulkDraft()));
+  try {
+    if (!bulkTableState.rows?.length) return;
+    const serializableRows = bulkTableState.rows.map(row => ({
+      item_name: row.item_name || '',
+      size: row.size || '',
+      condition: row.condition || 'A',
+      tier: row.tier || 'normal',
+      price: Number(row.price || 0),
+      cost: Number(row.cost || 0),
+      hasFiles: Array.isArray(row.files) ? row.files.length : 0
+    }));
+    localStorage.setItem(BULK_DRAFT_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      lotId: bulkTableState.lotId,
+      groupId: bulkTableState.group?.id || null,
+      source: bulkTableState.source || 'manual',
+      rows: serializableRows
+    }));
+  } catch (error) {
+    console.warn('Bulk draft save failed:', error);
+  }
 }
 
-// ลบ Draft เมื่อผู้ใช้บันทึก Bulk สำเร็จทั้งหมดแล้ว
-// Function: clearBulkDraft — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function clearBulkDraft() {
   localStorage.removeItem(BULK_DRAFT_KEY);
 }
 
-// โหลด Draft กลับมาเป็น staging table; รูปต้องเลือกรูปใหม่เพราะ File object เก็บข้าม session ไม่ได้
-// Function: restoreBulkDraft — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function restoreBulkDraft() {
-  const raw = localStorage.getItem(BULK_DRAFT_KEY);
-  if (!raw) return false;
   try {
+    const raw = localStorage.getItem(BULK_DRAFT_KEY);
+    if (!raw) return null;
     const draft = JSON.parse(raw);
-    const group = allGroups.find(g => g.id === draft.groupId);
-    if (!draft.lotId || !group || !Array.isArray(draft.rows) || !draft.rows.length) return false;
-    bulkTableState = {
-      lotId: draft.lotId,
-      group,
-      source: draft.source || 'photo-queue',
-      rows: draft.rows.map(row => ({...row, files: []}))
-    };
-    showBulkTable();
-    showBulkStep(2);
-    showToast('กู้ Bulk Draft แล้ว — กรุณาเลือกรูปใหม่ก่อนบันทึก');
-    return true;
+    if (!draft?.rows?.length) return null;
+    return draft;
   } catch (error) {
-    console.error('Bulk draft restore error:', error);
-    localStorage.removeItem(BULK_DRAFT_KEY);
-    return false;
+    console.warn('Bulk draft restore failed:', error);
+    return null;
   }
 }
 
-const $ = (id) => document.getElementById(id);
+function maybeOfferBulkDraft() {
+  const draft = restoreBulkDraft();
+  if (!draft || !$('bulkModal')) return;
+  const savedAt = new Date(draft.savedAt);
+  const ageHours = (Date.now() - savedAt.getTime()) / 3600000;
+  if (ageHours > 24) return clearBulkDraft();
 
-// Function: loadLots — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
+  // ใช้ confirm แบบ native เพื่อไม่เพิ่ม modal ซ้อนให้หน้าจอ Bulk
+  const resume = window.confirm(
+    `พบ Draft Bulk ${draft.rows.length} รายการ\nบันทึกเมื่อ ${savedAt.toLocaleString('th-TH')}\n\nกด OK เพื่อเปิด Draft ต่อ หรือ Cancel เพื่อลบทิ้ง`
+  );
+  if (!resume) return clearBulkDraft();
+
+  const lot = allLots.find(x => x.id === draft.lotId);
+  const group = allGroups.find(x => x.id === draft.groupId);
+  if (!lot || !group) {
+    clearBulkDraft();
+    return showToast('Draft เดิมหา Lot/Group ไม่พบ จึงเริ่มใหม่');
+  }
+
+  // สร้าง rows กลับมา แต่ File รูปจะว่าง เพราะ Browser ไม่สามารถ persist File object ได้
+  bulkTableState = {
+    lotId: lot.id,
+    group,
+    source: draft.source || 'resume',
+    rows: draft.rows.map(row => ({ ...row, files: [] }))
+  };
+  $('bulkModal').classList.remove('hidden');
+  showBulkTable();
+  showBulkStep(2);
+  showToast('กู้ Draft แล้ว — กรุณาเลือกรูปใหม่ก่อนบันทึก');
+}
+
+// Realtime ของหน้า Items: reload เมื่ออีก Device เพิ่ม/แก้/ขาย Item หรือเปลี่ยน Group
+window.addEventListener('vims:realtime', (event) => {
+  const table = event.detail?.table;
+  if (['items', 'item_images', 'lots', 'lot_groups'].includes(table)) {
+    loadLots();
+    loadItems();
+  }
+});
+
+
 async function loadLots() {
   const { data, error } = await supabaseClient.from('lots').select('*').order('purchase_date', {ascending:false});
   if (error) return showToast('โหลด Lot ไม่สำเร็จ: ' + error.message);
@@ -91,9 +116,12 @@ async function loadLots() {
   });
   await loadGroups();
   updateQuickStats();
+  if (!bulkDraftPrompted) {
+    bulkDraftPrompted = true;
+    window.setTimeout(maybeOfferBulkDraft, 150);
+  }
 }
 
-// Function: loadGroups — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadGroups(lotId = $('lotSelect')?.value) {
   if (!lotId) { allGroups=[]; renderGroups(); renderGroupOptions(); return; }
   const { data, error } = await supabaseClient.from('lot_groups').select('*').eq('lot_id', lotId).order('sort_order');
@@ -102,13 +130,11 @@ async function loadGroups(lotId = $('lotSelect')?.value) {
   renderGroups(); renderGroupOptions();
 }
 
-// Function: renderGroupOptions — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderGroupOptions() {
   const options = '<option value="">ไม่ระบุกลุ่ม</option>' + allGroups.map(g => `<option value="${g.id}">${escapeHtml(g.group_name)} · ${formatBaht(g.base_price)}</option>`).join('');
   if ($('groupSelect')) $('groupSelect').innerHTML = options; if ($('importGroupSelect')) $('importGroupSelect').innerHTML = allGroups.map(g => `<option value="${g.id}">${escapeHtml(g.group_name)} · ${formatBaht(g.base_price)}</option>`).join('');
 }
 
-// Function: renderGroups — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderGroups() {
   const el = $('groupList'); if (!el) return;
   if (!allGroups.length) { el.innerHTML = '<div class="empty-state">Lot นี้ยังไม่มีกลุ่ม กดเพิ่มกลุ่มด้านบนได้เลย</div>'; return; }
@@ -151,7 +177,6 @@ $('itemForm')?.addEventListener('submit', async e => {
   $('itemForm').reset(); $('condition').value='A'; $('tier').value='normal'; $('lotSelect').value=lotId; await loadGroups(lotId); await loadItems();
 });
 
-// Function: uploadItemImages — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function uploadItemImages(itemId, files) {
   for (let i=0; i<Math.min(files.length,2); i++) {
     const file=files[i]; const ext=(file.name.split('.').pop()||'jpg').toLowerCase(); const path=`${itemId}/${crypto.randomUUID()}.${ext}`;
@@ -162,19 +187,17 @@ async function uploadItemImages(itemId, files) {
   }
 }
 
-$('openBulk')?.addEventListener('click', async () => { $('bulkModal').classList.remove('hidden'); const rawDraft=localStorage.getItem(BULK_DRAFT_KEY); const draft=rawDraft ? JSON.parse(rawDraft) : null; $('bulkLot').value=draft?.lotId || $('lotSelect').value; await loadGroups($('bulkLot').value); if (!restoreBulkDraft()) showBulkStep(1); });
+$('openBulk')?.addEventListener('click', async () => { $('bulkModal').classList.remove('hidden'); $('bulkLot').value=$('lotSelect').value; await loadGroups($('bulkLot').value); showBulkStep(1); });
 $('closeBulk')?.addEventListener('click', () => $('bulkModal').classList.add('hidden'));
 $('backToGroups')?.addEventListener('click', () => showBulkStep(1));
 $('reviewBack')?.addEventListener('click', () => showBulkStep(1));
 $('finishBulk')?.addEventListener('click', () => { $('bulkModal').classList.add('hidden'); loadItems(); updateQuickStats(); });
 
-// Function: showBulkStep — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showBulkStep(n) {
   ['bulkStep1','bulkStep2','bulkStep3'].forEach((id,i)=>$(id).classList.toggle('hidden',i!==n-1));
   document.querySelectorAll('[data-step-label]').forEach(x=>x.classList.toggle('active',Number(x.dataset.stepLabel)===n));
 }
 
-// Function: startGroup — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function startGroup(groupId) {
   const group = allGroups.find(g=>g.id===groupId); if(!group) return;
   const count = Math.max(1, Math.min(200, Number($('groupCount').value||1)));
@@ -183,14 +206,11 @@ async function startGroup(groupId) {
   renderBulkProgress(); showBulkStep(2);
 }
 
-// Function: getLotAvgCost — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function getLotAvgCost(lotId) {
   const lot=allLots.find(x=>x.id===lotId); return lot && Number(lot.total_items)>0 ? (Number(lot.total_cost)/Number(lot.total_items)).toFixed(2) : '0';
 }
-// Function: renderBulkProgress — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderBulkProgress(){ const n=bulkState.index+1,total=bulkState.rows.length; $('progressTitle').textContent=bulkState.group.group_name; $('progressMeta').textContent=`${n} / ${total}`; $('progressBar').style.width=`${Math.round((bulkState.index/total)*100)}%`; }
 $('bulkImages')?.addEventListener('change', previewBulkImages);
-// Function: previewBulkImages — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function previewBulkImages(){ const files=Array.from($('bulkImages').files||[]).slice(0,2); $('photoPreview').innerHTML=files.length?files.map(f=>`<img src="${URL.createObjectURL(f)}" alt="">`).join(''):'<span>📷</span><small>เลือก 1–2 รูป</small>'; if(files.length>2) showToast('ระบบใช้แค่ 2 รูปแรก'); }
 $('quickEntryForm')?.addEventListener('submit', async e=>{
   e.preventDefault();
@@ -206,12 +226,10 @@ $('quickEntryForm')?.addEventListener('submit', async e=>{
 
 $('focusSingle')?.addEventListener('click',()=>{ $('itemName').focus(); window.scrollTo({top:0,behavior:'smooth'}); });
 $('filterStatus')?.addEventListener('change',loadItems); $('searchBox')?.addEventListener('input',loadItems);
-// Function: loadItems — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadItems(){
   const status=$('filterStatus').value,q=($('searchBox').value||'').trim(); let query=supabaseClient.from('items').select('*, lots(lot_name), lot_groups(group_name)').order('created_at',{ascending:false}); if(status!=='all') query=query.eq('status',status); if(q) query=query.ilike('item_name',`%${q}%`);
   const {data,error}=await query; if(error){$('itemList').innerHTML='<div class="empty-state">โหลดข้อมูลไม่สำเร็จ</div>';return;} itemsCache=data||[]; renderItems(); updateQuickStats();
 }
-// Function: renderItems — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function renderItems(){
   // โหลดรูปทั้งหมดของรายการที่กำลังแสดง เพื่อให้ card รู้ว่ามีรูป 1 หรือ 2 รูป
   if(!itemsCache.length){$('itemList').innerHTML='<div class="empty-state">ไม่มีสินค้าในรายการนี้</div>';return;}
@@ -231,11 +249,8 @@ async function renderItems(){
   }).join('');
   $('itemList').querySelectorAll('[data-edit-item]').forEach(btn=>btn.onclick=()=>openEditItem(btn.dataset.editItem));
 }
-// Function: updateQuickStats — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function updateQuickStats(){ const {data,error}=await supabaseClient.from('items').select('status,cost_price'); if(error)return; const rows=data||[]; const available=rows.filter(x=>x.status==='available'); const sold=rows.filter(x=>x.status==='sold'); const value=available.reduce((s,x)=>s+Number(x.cost_price||0),0); $('quickStats').innerHTML=`<div><span>สินค้าทั้งหมด</span><b>${rows.length}</b></div><div><span>พร้อมขาย</span><b>${available.length}</b></div><div><span>ขายแล้ว</span><b>${sold.length}</b></div><div><span>ต้นทุนคงเหลือ</span><b>${formatBaht(value)}</b></div>`; }
-// Function: escapeHtml — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function escapeHtml(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-// Function: showToast — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showToast(msg){const t=$('toast');if(!t)return;t.textContent=msg;t.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),2600);}
 loadLots(); loadItems();
 
@@ -245,7 +260,6 @@ loadLots(); loadItems();
 // ============================================================
 
 // เปิด Photo Queue สำหรับ Group ที่เลือก
-// Function: openPhotoQueue — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function openPhotoQueue(groupId) {
   // หา Group จาก memory เพื่อรู้ Lot และราคาเริ่มต้น
   const group = allGroups.find((item) => item.id === groupId);
@@ -266,7 +280,6 @@ async function openPhotoQueue(groupId) {
 }
 
 // ปิด Photo Queue โดยไม่เขียนข้อมูลลงฐานข้อมูล
-// Function: closePhotoQueue — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function closePhotoQueue() {
   $('photoQueuePanel').classList.add('hidden');
   photoQueueState = { lotId:null, group:null, itemCount:0, files:[], roles:{} };
@@ -297,7 +310,6 @@ $('photoQueueInput')?.addEventListener('change', (event) => {
 });
 
 // แสดง grid รูปทั้งหมดพร้อม dropdown บอกว่าเป็นรูปหลักหรือรูปที่ 2 ของ Item ไหน
-// Function: renderPhotoQueue — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderPhotoQueue() {
   // อ่านจำนวนรูปที่เลือก
   const total = photoQueueState.files.length;
@@ -341,7 +353,6 @@ function renderPhotoQueue() {
 }
 
 // สร้างคู่รูป [primary, secondary] สำหรับ Item 1..N จาก staging ใน Photo Queue
-// Function: buildPhotoPairsFromQueue — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function buildPhotoPairsFromQueue() {
   // สร้าง array ของ Item ตามจำนวนที่ผู้ใช้กำหนด
   const pairs = Array.from({ length: photoQueueState.itemCount }, () => [null, null]);
@@ -396,7 +407,6 @@ $('startPhotoQueueEntry')?.addEventListener('click', async () => {
 });
 
 // แสดง Bulk Table และซ่อน Quick Entry เพื่อให้ผู้ใช้ทำงานทั้งกองในครั้งเดียว
-// Function: showBulkTable — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function showBulkTable() {
   $('bulkTablePanel').classList.remove('hidden');
   $('quickEntryPanel').classList.add('hidden');
@@ -413,9 +423,7 @@ $('bulkTableBack')?.addEventListener('click', () => {
 });
 
 // วาดตารางจาก state; input ทุกช่องผูก data-row/data-field เพื่อแก้ state โดยตรง
-// Function: renderBulkTable — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderBulkTable() {
-  // ทุกครั้งที่ตารางถูก render เราเก็บข้อความ/ราคา/Size ล่าสุดไว้เป็น Draft ในเครื่อง
   const rows = bulkTableState.rows || [];
   $('bulkTableBody').innerHTML = rows.map((row, index) => {
     // สร้าง thumbnail จาก File object ที่ยังอยู่ใน browser memory
@@ -437,14 +445,14 @@ function renderBulkTable() {
   $('bulkTableBody').querySelectorAll('[data-row][data-field]').forEach(el => {
     el.addEventListener('input', updateBulkTableField);
     el.addEventListener('change', updateBulkTableField);
+    // ทุกการแก้ช่องใน Bulk Table จะ update Draft เพื่อรองรับ Resume
+    el.addEventListener('input', saveBulkDraft);
   });
   // bind keyboard/clipboard หลัง render เพราะ input/select ถูกสร้างใหม่ทุกครั้ง
   bindBulkTableKeyboard();
-  saveBulkDraft();
 }
 
 // รับค่าจาก input/select แล้วอัปเดต staging row ใน memory
-// Function: updateBulkTableField — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function updateBulkTableField(event) {
   const el = event.currentTarget;
   const rowIndex = Number(el.dataset.row);
@@ -458,7 +466,6 @@ function updateBulkTableField(event) {
   const invalid = !String(bulkTableState.rows[rowIndex].item_name || '').trim();
   rowEl?.classList.toggle('bulk-table-row-invalid', invalid);
   if (errorEl) errorEl.textContent = invalid ? 'ต้องใส่ชื่อสินค้า' : '';
-  saveBulkDraft();
 }
 
 // ------------------------------------------------------------
@@ -470,7 +477,6 @@ let bulkTableFocus = { row: 0, field: 'item_name' };
 const BULK_EDITABLE_FIELDS = ['item_name', 'size', 'condition', 'tier', 'price'];
 
 // จำว่าผู้ใช้กำลังแก้ช่องไหน เพื่อให้ Enter / Fill ลง / Paste เริ่มจากตำแหน่งเดียวกัน
-// Function: rememberBulkTableFocus — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function rememberBulkTableFocus(el) {
   if (!el?.dataset?.row || !el?.dataset?.field) return;
   bulkTableFocus = { row: Number(el.dataset.row), field: el.dataset.field };
@@ -479,13 +485,11 @@ function rememberBulkTableFocus(el) {
 }
 
 // คืน element ของช่องในแถว/field ที่ต้องการ โดยไม่ต้องวาดตารางใหม่
-// Function: getBulkCell — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function getBulkCell(rowIndex, field) {
   return document.querySelector(`#bulkTableBody [data-row="${rowIndex}"][data-field="${field}"]`);
 }
 
 // เขียนค่าจาก state กลับเข้า input/select ของแถวเดียว
-// Function: syncBulkCell — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function syncBulkCell(rowIndex, field) {
   const el = getBulkCell(rowIndex, field);
   const value = bulkTableState.rows[rowIndex]?.[field] ?? '';
@@ -495,7 +499,6 @@ function syncBulkCell(rowIndex, field) {
 
 // Fill Down: เอาค่าจากช่องที่กำลัง focus ไปเติมทุกแถวด้านล่าง
 // ตัวอย่าง: เลือก Condition = A ที่แถว 1 -> Ctrl+Enter -> แถว 2..200 เป็น A
-// Function: fillDownCurrentField — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function fillDownCurrentField() {
   const { row, field } = bulkTableFocus;
   const source = bulkTableState.rows[row];
@@ -511,7 +514,6 @@ function fillDownCurrentField() {
 }
 
 // Refresh สถานะ validation ของทุกแถว โดยไม่สร้าง DOM ใหม่
-// Function: refreshBulkTableValidationRows — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function refreshBulkTableValidationRows() {
   bulkTableState.rows.forEach((row, index) => {
     const rowEl = document.querySelector(`#bulkTableBody tr[data-row="${index}"]`);
@@ -523,7 +525,6 @@ function refreshBulkTableValidationRows() {
 }
 
 // สร้าง TSV ของแถวปัจจุบัน เพื่อเอาไปวางใน Excel/Google Sheets ได้ทันที
-// Function: buildBulkRowTSV — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function buildBulkRowTSV(rowIndex) {
   const row = bulkTableState.rows[rowIndex];
   if (!row) return '';
@@ -531,7 +532,6 @@ function buildBulkRowTSV(rowIndex) {
 }
 
 // Copy Row: คัดลอกเฉพาะข้อมูล ไม่คัดลอกรูป เพราะรูปเป็น File object และไม่ควรถูกส่งผ่าน clipboard
-// Function: copyCurrentBulkRow — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function copyCurrentBulkRow() {
   const rowIndex = bulkTableFocus.row;
   const text = buildBulkRowTSV(rowIndex);
@@ -547,7 +547,6 @@ async function copyCurrentBulkRow() {
 
 // อัปเดต state จาก matrix TSV ที่มาจาก Excel/Google Sheets
 // Mapping: item_name | size | condition | tier | price
-// Function: pasteBulkMatrix — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function pasteBulkMatrix(text, startRow, startField) {
   const matrix = String(text || '').replace(/\r/g, '').trimEnd().split('\n').map(line => line.split('\t'));
   if (!matrix.length || !matrix[0].length) return false;
@@ -575,7 +574,6 @@ function pasteBulkMatrix(text, startRow, startField) {
 }
 
 // อ่าน Clipboard ด้วยปุ่ม “วางจาก Excel” แล้วเริ่มที่ช่องที่ focus ล่าสุด
-// Function: pasteFromClipboardButton — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function pasteFromClipboardButton() {
   try {
     const text = await navigator.clipboard.readText();
@@ -588,7 +586,6 @@ async function pasteFromClipboardButton() {
 }
 
 // ผูก keyboard workflow ของ Bulk Table: Enter/Shift+Enter และ Ctrl+Enter
-// Function: bindBulkTableKeyboard — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function bindBulkTableKeyboard() {
   const body = $('bulkTableBody');
   if (!body || body.dataset.keyboardBound === '1') return;
@@ -640,7 +637,6 @@ $('copyCurrentRow')?.addEventListener('click', copyCurrentBulkRow);
 $('pasteClipboard')?.addEventListener('click', pasteFromClipboardButton);
 
 // ตรวจข้อมูลทั้งหมดก่อนเริ่มเขียนลง Supabase
-// Function: validateBulkTable — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function validateBulkTable() {
   const rows = bulkTableState.rows || [];
   if (!rows.length) return 'ยังไม่มีรายการในตาราง';
@@ -688,6 +684,7 @@ $('saveBulkTable')?.addEventListener('click', async () => {
     }
     // ล้าง staging หลังบันทึกสำเร็จ เพื่อไม่ให้ข้อมูลเก่าค้างอยู่ใน browser
     bulkTableState = { lotId:null, group:null, rows:[], source:'photo-queue' };
+    clearBulkDraft();
     $('bulkTablePanel').classList.add('hidden');
     $('quickEntryPanel').classList.remove('hidden');
     $('bulkSummary').innerHTML = `<div class="success-box">✓ บันทึกสินค้า ${inserted.length} รายการสำเร็จ</div>`;
@@ -706,7 +703,6 @@ $('saveBulkTable')?.addEventListener('click', async () => {
 });
 
 // เตรียมรูปของ Item ที่กำลังกรอกเข้า file input ของ Quick Entry
-// Function: prepareQueuedItem — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function prepareQueuedItem(index) {
   // อ่านคู่รูปของ Item ปัจจุบัน
   const pair = bulkState.photoPairs[index] || [];
@@ -814,6 +810,7 @@ $('importExcelBtn')?.addEventListener('click', async () => {
   // แสดงตารางตรวจสอบแทนการ insert ทันที เพื่อให้ Excel มี workflow เดียวกับ Photo Queue
   showBulkTable();
   showBulkStep(2);
+  saveBulkDraft();
   showToast(`เตรียมตาราง ${rows.length} รายการแล้ว ตรวจสอบก่อนบันทึกได้เลย`);
 });
 
@@ -824,7 +821,6 @@ $('importExcelBtn')?.addEventListener('click', async () => {
 let editItemImages = [];
 
 // เปิด Edit Modal จาก Item ID ที่มาจาก Stock Card
-// Function: openEditItem — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function openEditItem(itemId) {
   // หา Item จาก cache ก่อน เพื่อลด query ที่ไม่จำเป็น
   const item = itemsCache.find(x => x.id === itemId);
@@ -866,7 +862,6 @@ async function openEditItem(itemId) {
 }
 
 // แสดงรูปเดิมใน Edit Modal; รูปใหม่จะยังไม่ถูก upload จนกด Save
-// Function: renderEditCurrentImages — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function renderEditCurrentImages() {
   if (!editItemImages.length) {
     $('editCurrentImages').innerHTML = '<div class="edit-image-empty">ยังไม่มีรูปสินค้า</div>';
@@ -876,7 +871,6 @@ function renderEditCurrentImages() {
 }
 
 // โหลดประวัติการแก้ไขจาก Supabase; ใช้สำหรับ audit trail ของ Item แต่ละตัว
-// Function: loadItemHistory — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 async function loadItemHistory(itemId) {
   const { data, error } = await supabaseClient.from('item_change_history').select('*').eq('item_id', itemId).order('created_at', {ascending:false}).limit(30);
   if (error) {
@@ -898,7 +892,6 @@ async function loadItemHistory(itemId) {
   }).join('');
 }
 
-// Function: closeEditItem — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function closeEditItem() {
   $('editItemModal').classList.add('hidden');
   editingItemId = null;
@@ -917,7 +910,6 @@ $('editImages')?.addEventListener('change', event => {
   $('editCurrentImages').innerHTML = previews || editItemImages.map((img, index) => `<div class="edit-image-card"><img src="${img.image_url}" alt=""><span>รูปที่ ${index + 1}</span></div>`).join('');
 });
 
-// Function: changedFieldMap — หน้าที่หลักของฟังก์ชันนี้; ดู query/RPC/DOM ภายในเพื่อไล่ Data Flow
 function changedFieldMap(before, after) {
   const fields = ['item_name','size','condition','tier','status','group_id','cost_price','base_price','current_price'];
   const result = {};
@@ -971,6 +963,3 @@ $('editItemForm')?.addEventListener('submit', async event => {
     saveButton.disabled = false;
   }
 });
-
-// ก่อนปิด/refresh หน้า ให้เก็บ Bulk Draft ล่าสุดไว้ในเครื่อง (ถ้ามี)
-window.addEventListener('beforeunload', () => saveBulkDraft());

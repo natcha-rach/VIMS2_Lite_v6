@@ -298,3 +298,7 @@ reports.html
 - The URL must be the project root, not `/rest/v1/`.
 - Storage bucket expected by the app: `item-images`.
 - For a fresh Supabase project, use `sql/schema.sql`; do not run incremental migrations v2-v9.
+
+
+## V10.1
+See `CODE_MAP.md`, `CHANGELOG_V10.1.md`, and `sql/migration_v10_1_realtime.sql`. Run the migration only after confirming the existing V10 tables.
