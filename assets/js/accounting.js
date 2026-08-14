@@ -2,6 +2,11 @@ let editingExpenseId = null;
 let expensesCache = [];
 let baseAmountTouched = false;
 
+// escapeHtml: ไฟล์นี้เดิมไม่มีฟังก์ชันนี้ ทำให้ category/note ของค่าใช้จ่ายถูกยัดเข้า innerHTML ตรงๆ
+function escapeHtml(v = "") {
+  return String(v).replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
+}
+
 document.getElementById("expenseDate").valueAsDate = new Date();
 
 /* ---------- ระบบแบ่งถังเงิน ---------- */
@@ -163,8 +168,8 @@ function renderExpenseList() {
       (exp) => `
       <div class="tag-card expense-row">
         <div>
-          <div class="expense-category">${exp.category}</div>
-          <div class="expense-meta">${formatDate(exp.expense_date)}${exp.note ? " · " + exp.note : ""}</div>
+          <div class="expense-category">${escapeHtml(exp.category)}</div>
+          <div class="expense-meta">${formatDate(exp.expense_date)}${exp.note ? " · " + escapeHtml(exp.note) : ""}</div>
         </div>
         <div class="expense-actions">
           <div class="expense-amount">${formatBaht(exp.amount)}</div>
@@ -194,11 +199,12 @@ function renderExpenseList() {
 let ledgerRowsForExport = [];
 
 async function loadAll() {
+  // fetchAllRows กัน sales/expenses ตกหล่นแบบเงียบๆ เมื่อเกิน 1000 แถว (default row limit ของ Supabase)
   const [{ data: lots, error: lotsErr }, { data: expenses, error: expErr }, { data: sales, error: salesErr }] =
     await Promise.all([
-      supabaseClient.from("lots").select("*"),
-      supabaseClient.from("expenses").select("*"),
-      supabaseClient.from("sales").select("*, items(item_name)"),
+      fetchAllRows(() => supabaseClient.from("lots").select("*")),
+      fetchAllRows(() => supabaseClient.from("expenses").select("*")),
+      fetchAllRows(() => supabaseClient.from("sales").select("*, items(item_name)")),
     ]);
 
   if (lotsErr || expErr || salesErr) {
@@ -243,6 +249,8 @@ async function loadAll() {
 function renderLedger(lots, expenses, sales) {
   const events = [];
 
+  // desc เก็บเป็นข้อความดิบ (ไม่ escape) เพราะใช้ทั้งแสดงผลและ export CSV
+  // การ escape สำหรับ HTML ทำตอน render เท่านั้น (ดู renderLedger ด้านล่าง)
   lots.forEach((l) => {
     events.push({
       date: new Date(l.purchase_date),
@@ -293,7 +301,7 @@ function renderLedger(lots, expenses, sales) {
       (ev) => `
       <tr>
         <td>${formatDate(ev.date)}</td>
-        <td>${ev.desc}</td>
+        <td>${escapeHtml(ev.desc)}</td>
         <td style="text-align:right">${ev.in ? formatBaht(ev.in) : "-"}</td>
         <td style="text-align:right">${ev.out ? formatBaht(ev.out) : "-"}</td>
         <td style="text-align:right">${formatBaht(ev.balance)}</td>
@@ -343,5 +351,5 @@ loadBucketSettings();
 
 // Realtime: บัญชีสะท้อนค่าใช้จ่าย/ยอดขาย/Lot ที่เปลี่ยนจาก Device อื่น
 window.addEventListener('vims:realtime', (event) => {
-  if (['expenses', 'sales', 'lots'].includes(event.detail?.table)) loadAll();
+  if (event.detail?.table === 'page_refresh' || ['expenses', 'sales', 'lots'].includes(event.detail?.table)) loadAll();
 });

@@ -7,7 +7,12 @@
 
 let inStockItems = [];
 let itemImagesById = {};
+let soldItems = [];
+let soldImagesById = {};
+let soldLoaded = false;
 let selectedItem = null;
+let activeTab = "available"; // "available" | "sold" — คุมว่าแท็บไหนกำลังแสดงอยู่
+let detailContext = "available"; // จำไว้ว่า saleDetailModal เปิดมาจากแท็บไหน เพื่อซ่อนปุ่ม "ขายสินค้านี้" ตอนดูของที่ขายแล้ว
 
 // โหลดสินค้าเฉพาะสถานะ available เพื่อไม่ให้สินค้าที่ขายแล้วกลับมาเลือกขายซ้ำ
 async function loadSellGrid() {
@@ -46,6 +51,89 @@ async function loadSellGrid() {
   renderGrid(inStockItems);
 }
 
+// โหลดของที่ขายแล้ว (300 รายการล่าสุด) สำหรับแท็บ "ขายแล้ว" — ดูรายงานย้อนหลังทั้งหมดได้ที่หน้ารายงาน
+async function loadSoldGrid() {
+  const { data: sales, error } = await supabaseClient
+    .from("sales")
+    .select("item_id, sale_price, sale_date, items(id, item_name, size, condition, tier, cost_price, base_price, lot_id, group_id, lots(lot_name), lot_groups(group_name))")
+    .order("sale_date", { ascending: false })
+    .limit(300);
+
+  if (error) {
+    console.error(error);
+    document.getElementById("soldGrid").innerHTML = `<div class="empty-state">โหลดข้อมูลไม่สำเร็จ</div>`;
+    return;
+  }
+
+  // แปลง sales+items ให้อยู่ในรูปแบบเดียวกับ inStockItems เพื่อใช้ openItemSaleDetail ร่วมกันได้
+  soldItems = (sales || [])
+    .filter((s) => s.items)
+    .map((s) => ({
+      ...s.items,
+      current_price: s.sale_price,
+      _saleDate: s.sale_date,
+    }));
+
+  const ids = soldItems.map((item) => item.id);
+  soldImagesById = {};
+  if (ids.length) {
+    const { data: images, error: imageError } = await supabaseClient
+      .from("item_images")
+      .select("item_id, image_url, sort_order")
+      .in("item_id", ids)
+      .order("sort_order", { ascending: true });
+    if (!imageError) {
+      (images || []).forEach((image) => {
+        if (!soldImagesById[image.item_id]) soldImagesById[image.item_id] = [];
+        soldImagesById[image.item_id].push(image);
+      });
+    }
+  }
+
+  soldLoaded = true;
+  renderSoldGrid(soldItems);
+}
+
+// สร้างการ์ดของที่ขายแล้ว: คลิกเพื่อดูรายละเอียด/ประวัติการขาย (ขายซ้ำไม่ได้)
+function renderSoldGrid(items) {
+  if (!items.length) {
+    document.getElementById("soldGrid").innerHTML = `<div class="empty-state">ยังไม่มีของที่ขายแล้ว</div>`;
+    return;
+  }
+  const html = items.map((item) => {
+    const image = soldImagesById[item.id]?.[0];
+    return `
+      <button class="item-tile tile-sold" data-id="${item.id}">
+        <div class="item-tile-image">${image ? `<img src="${image.image_url}" alt="">` : "👕"}</div>
+        <div class="name">${escapeHtml(item.item_name)}</div>
+        <div class="meta">${escapeHtml(item.size || "-")} · ${item.condition || "-"} · ${item.tier === "head" ? "งานหัว" : "ปกติ"}</div>
+        <div class="price">${formatBaht(item.current_price)}</div>
+        <div class="item-tile-sold-date">${formatDateTime(item._saleDate)}</div>
+      </button>`;
+  }).join("");
+
+  document.getElementById("soldGrid").innerHTML = html;
+  document.querySelectorAll("#soldGrid .item-tile").forEach((tile) => {
+    tile.addEventListener("click", () => openItemSaleDetail(tile.dataset.id, "sold"));
+  });
+}
+
+// สลับแท็บพร้อมขาย / ขายแล้ว
+document.querySelectorAll(".sell-tab").forEach((tab) => {
+  tab.addEventListener("click", async () => {
+    activeTab = tab.dataset.tab;
+    document.querySelectorAll(".sell-tab").forEach((t) => t.classList.toggle("active", t === tab));
+    document.getElementById("sellGrid").classList.toggle("hidden", activeTab !== "available");
+    document.getElementById("soldGrid").classList.toggle("hidden", activeTab !== "sold");
+    document.getElementById("sellHintAvailable").classList.toggle("hidden", activeTab !== "available");
+    document.getElementById("sellHintSold").classList.toggle("hidden", activeTab !== "sold");
+    document.getElementById("searchBox").value = "";
+    if (activeTab === "sold" && !soldLoaded) await loadSoldGrid();
+    else if (activeTab === "sold") renderSoldGrid(soldItems);
+    else renderGrid(inStockItems);
+  });
+});
+
 // สร้างการ์ดสินค้า: คลิกได้ทั้งการ์ดเพื่อเปิดรายละเอียดก่อนขาย
 function renderGrid(items) {
   if (!items.length) {
@@ -65,16 +153,18 @@ function renderGrid(items) {
   }).join("");
 
   document.getElementById("sellGrid").innerHTML = html;
-  document.querySelectorAll(".item-tile").forEach((tile) => {
-    tile.addEventListener("click", () => openItemSaleDetail(tile.dataset.id));
+  document.querySelectorAll("#sellGrid .item-tile").forEach((tile) => {
+    tile.addEventListener("click", () => openItemSaleDetail(tile.dataset.id, "available"));
   });
 }
 
-// ค้นหาแบบทันทีจากชื่อสินค้า / size / group / lot เพื่อให้ใช้หน้าร้านได้เร็ว
+// ค้นหาแบบทันทีจากชื่อสินค้า / size / group / lot เพื่อให้ใช้หน้าร้านได้เร็ว — ใช้ได้ทั้งแท็บพร้อมขายและขายแล้ว
 function applySearch() {
   const q = document.getElementById("searchBox").value.trim().toLowerCase();
-  if (!q) return renderGrid(inStockItems);
-  const filtered = inStockItems.filter((item) => {
+  const source = activeTab === "sold" ? soldItems : inStockItems;
+  const render = activeTab === "sold" ? renderSoldGrid : renderGrid;
+  if (!q) return render(source);
+  const filtered = source.filter((item) => {
     const haystack = [
       item.item_name,
       item.size,
@@ -84,18 +174,21 @@ function applySearch() {
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(q);
   });
-  renderGrid(filtered);
+  render(filtered);
 }
 
 document.getElementById("searchBox").addEventListener("input", applySearch);
 
 // เปิดหน้ารายละเอียด: เป็นจุดกลางระหว่าง “ค้นหา” และ “ยืนยันการขาย”
-async function openItemSaleDetail(itemId) {
-  const item = inStockItems.find((row) => row.id === itemId);
+// context = "available" (มาจากแท็บพร้อมขาย ขายได้) หรือ "sold" (มาจากแท็บขายแล้ว ดูอย่างเดียว)
+async function openItemSaleDetail(itemId, context = "available") {
+  detailContext = context;
+  const item = (context === "sold" ? soldItems : inStockItems).find((row) => row.id === itemId);
   if (!item) return;
   selectedItem = item;
+  document.getElementById("openSellConfirm").classList.toggle("hidden", context === "sold");
 
-  const images = itemImagesById[item.id] || [];
+  const images = (context === "sold" ? soldImagesById : itemImagesById)[item.id] || [];
   document.getElementById("detailImage1").innerHTML = images[0] ? `<img src="${images[0].image_url}" alt="">` : "👕";
   document.getElementById("detailImage2").innerHTML = images[1] ? `<img src="${images[1].image_url}" alt="">` : "＋";
   document.getElementById("detailName").textContent = item.item_name;
@@ -234,8 +327,10 @@ function showToast(msg) {
 // ==========================================================
 window.addEventListener('vims:realtime', (event) => {
   const table = event.detail?.table;
-  if (['items', 'item_images', 'sales'].includes(table)) {
+  if (table === 'page_refresh' || ['items', 'item_images', 'sales'].includes(table)) {
     loadSellGrid();
+    soldLoaded = false; // ให้โหลดของขายแล้วใหม่ครั้งถัดไปที่สลับมาแท็บนี้
+    if (activeTab === 'sold') loadSoldGrid();
   }
 });
 

@@ -47,11 +47,12 @@ async function loadReport() {
   const {start,end}=getMainRange();
   try {
     /* Query ครั้งเดียวแล้วคำนวณหลายมุมใน browser เพื่อให้หน้า report ตอบสนองเร็ว */
+    // fetchAllRows กัน items/sales ตกหล่นแบบเงียบๆ เมื่อเกิน 1000 แถว (default row limit ของ Supabase)
     const [salesR, expensesR, itemsR, lotsR] = await Promise.all([
-      supabaseClient.from("sales").select("id,item_id,sale_date,channel,sale_price,cost_price,payment_method,note,items(item_name,size,condition,tier)").gte("sale_date",start.toISOString()).lt("sale_date",end.toISOString()).order("sale_date",{ascending:false}),
-      supabaseClient.from("expenses").select("id,expense_date,amount,category,note").gte("expense_date",start.toISOString().slice(0,10)).lte("expense_date",new Date(end.getTime()-86400000).toISOString().slice(0,10)),
-      supabaseClient.from("items").select("id,item_name,size,condition,tier,lot_id"),
-      supabaseClient.from("lots").select("id,lot_name,total_cost,total_items,purchase_date")
+      fetchAllRows(() => supabaseClient.from("sales").select("id,item_id,sale_date,channel,sale_price,cost_price,payment_method,note,items(item_name,size,condition,tier)").gte("sale_date",start.toISOString()).lt("sale_date",end.toISOString()).order("sale_date",{ascending:false})),
+      fetchAllRows(() => supabaseClient.from("expenses").select("id,expense_date,amount,category,note").gte("expense_date",start.toISOString().slice(0,10)).lte("expense_date",new Date(end.getTime()-86400000).toISOString().slice(0,10))),
+      fetchAllRows(() => supabaseClient.from("items").select("id,item_name,size,condition,tier,lot_id")),
+      fetchAllRows(() => supabaseClient.from("lots").select("id,lot_name,total_cost,total_items,purchase_date"))
     ]);
     const err=salesR.error||expensesR.error||itemsR.error||lotsR.error; if(err) throw err;
     const sales=salesR.data||[], expenses=expensesR.data||[], items=itemsR.data||[], lots=lotsR.data||[];
@@ -81,7 +82,7 @@ function renderTierBreakdown(sales,items) {
 function renderLotBreakdown(sales,items,lots) {
   const map=Object.fromEntries(items.map(i=>[i.id,i])); const by=Object.fromEntries(lots.map(l=>[l.id,{lot:l,sold:0,revenue:0,profit:0}]));
   sales.forEach(s=>{const i=map[s.item_id],r=i&&by[i.lot_id];if(!r)return;r.sold++;r.revenue+=Number(s.sale_price||0);r.profit+=Number(s.sale_price||0)-Number(s.cost_price||0);});
-  const rows=Object.values(by).filter(x=>x.sold).sort((a,b)=>b.profit-a.profit); document.getElementById("repLotBreakdown").innerHTML=rows.length?rows.map(x=>`<tr><td><b>${x.lot.lot_name}</b><small class="table-sub">${x.lot.total_items} ชิ้น · ${x.sold} ขาย</small></td><td style="text-align:right">${formatBaht(x.lot.total_cost)}</td><td style="text-align:right">${x.sold}</td><td style="text-align:right">${formatBaht(x.revenue)}</td><td style="text-align:right" class="${x.profit>=0?'profit':'loss'}">${formatBaht(x.profit)}</td><td style="text-align:right">${percent(x.profit,x.lot.total_cost).toFixed(1)}%</td></tr>`).join(""):"<tr><td colspan=6 class=empty-state>ไม่มีรายการขาย</td></tr>";
+  const rows=Object.values(by).filter(x=>x.sold).sort((a,b)=>b.profit-a.profit); document.getElementById("repLotBreakdown").innerHTML=rows.length?rows.map(x=>`<tr><td><b>${escapeHtml(x.lot.lot_name)}</b><small class="table-sub">${x.lot.total_items} ชิ้น · ${x.sold} ขาย</small></td><td style="text-align:right">${formatBaht(x.lot.total_cost)}</td><td style="text-align:right">${x.sold}</td><td style="text-align:right">${formatBaht(x.revenue)}</td><td style="text-align:right" class="${x.profit>=0?'profit':'loss'}">${formatBaht(x.profit)}</td><td style="text-align:right">${percent(x.profit,x.lot.total_cost).toFixed(1)}%</td></tr>`).join(""):"<tr><td colspan=6 class=empty-state>ไม่มีรายการขาย</td></tr>";
 }
 function renderWeekendBreakdown(sales) {
   const by={6:{label:"เสาร์",count:0,revenue:0,profit:0},0:{label:"อาทิตย์",count:0,revenue:0,profit:0}};
@@ -105,5 +106,5 @@ loadReport();
 
 // Realtime: รายงานจะโหลดข้อมูลใหม่เมื่อยอดขาย/ค่าใช้จ่าย/สินค้าเปลี่ยนจาก Device อื่น
 window.addEventListener('vims:realtime', (event) => {
-  if (['sales', 'expenses', 'items', 'lots'].includes(event.detail?.table)) loadReport();
+  if (event.detail?.table === 'page_refresh' || ['sales', 'expenses', 'items', 'lots'].includes(event.detail?.table)) loadReport();
 });

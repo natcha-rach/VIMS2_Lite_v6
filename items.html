@@ -26,8 +26,8 @@
   <div class="topbar"><div class="subtitle">สินค้า / สต็อก</div></div>
   <main class="page">
     <div class="page-head">
-      <div><h1>สินค้า</h1><p>รับของเร็วแบบทีละตัว หรือจัดการทั้งกองจากกระสอบ</p></div>
-      <div class="head-actions"><button class="btn btn-ghost" id="openBulk">📦 รับเป็นกอง</button><button class="btn btn-primary" id="focusSingle">＋ เพิ่มสินค้า</button></div>
+      <div><h1>สินค้า</h1><p>เพิ่มของ 2–3 ตัวทีละชิ้น หรือลงทั้งกระสอบหลักร้อยชิ้นทีเดียว</p></div>
+      <div class="head-actions"><button class="btn btn-ghost" id="openBulk">📦 ลงสินค้าหลายชิ้น</button><button class="btn btn-primary" id="focusSingle">＋ เพิ่มสินค้า</button></div>
     </div>
 
     <section class="quick-stats" id="quickStats"></section>
@@ -37,7 +37,7 @@
       <form id="itemForm">
         <div class="field-row three"><div class="field"><label>ล็อต</label><select id="lotSelect" required></select></div><div class="field"><label>กลุ่ม</label><select id="groupSelect"></select></div><div class="field"><label>ชื่อสินค้า</label><input id="itemName" required placeholder="เช่น Nike Vintage" /></div></div>
         <div class="field-row four"><div class="field"><label>ไซซ์</label><input id="size" placeholder="M / L / XL" /></div><div class="field"><label>สภาพ</label><select id="condition"><option value="A">A</option><option value="B">B</option></select></div><div class="field"><label>Tier</label><select id="tier"><option value="normal">ปกติ</option><option value="head">งานหัว</option></select></div><div class="field"><label>ราคาขาย</label><input id="sellPrice" type="number" min="0" step="1" required /></div></div>
-        <div class="field-row"><div class="field"><label>รูปสินค้า (สูงสุด 2 รูป)</label><input id="singleImages" type="file" accept="image/*" multiple /></div><div class="field"><label>ต้นทุน/ชิ้น</label><input id="costPrice" type="number" min="0" step="0.01" required /></div></div>
+        <div class="field-row"><div class="field"><label>รูปสินค้า (สูงสุด 2 รูป)</label><input id="singleImages" type="file" accept="image/*" multiple /></div><div class="field"><label>ต้นทุน/ชิ้น <small>(ดึงจากต้นทุนเฉลี่ยของ Lot ให้อัตโนมัติ แก้ได้ถ้าจำเป็น)</small></label><input id="costPrice" type="number" min="0" step="0.01" required /></div></div>
         <div class="form-actions"><button type="submit" class="btn btn-primary">บันทึกสินค้า</button></div>
       </form>
     </section>
@@ -48,14 +48,15 @@
 
 <div class="modal-backdrop hidden" id="bulkModal">
   <div class="modal-sheet bulk-sheet">
-    <div class="modal-head"><div><h2>รับสินค้าเป็นกอง</h2><p>สร้างกลุ่มราคาเฉพาะ Lot แล้วลงของทีละตัวแบบเร็ว</p></div><button class="icon-btn" id="closeBulk">×</button></div>
+    <div class="modal-head"><div><h2>ลงสินค้าหลายชิ้น</h2><p>สร้างกลุ่มราคาเฉพาะ Lot แล้วเลือกวิธีลงของให้เหมาะกับจำนวนที่มี</p></div><button class="icon-btn" id="closeBulk">×</button></div>
     <div class="bulk-steps"><span class="active" data-step-label="1">1. เลือก Lot / กลุ่ม</span><span data-step-label="2">2. ลงสินค้า</span><span data-step-label="3">3. ตรวจสอบ</span></div>
     <div id="bulkStep1">
       <div class="field-row"><div class="field"><label>Lot</label><select id="bulkLot"></select></div><div class="field"><label>จำนวนที่ต้องลง</label><input id="groupCount" type="number" min="1" max="200" value="1" /></div></div>
       <div class="group-create"><div class="field"><label>ชื่อกลุ่ม</label><input id="newGroupName" placeholder="เช่น ฿100+ / งานหัว / Vintage" /></div><div class="field"><label>ราคาตั้งต้น</label><input id="newGroupPrice" type="number" min="0" value="199" /></div><div class="field"><label>Tier</label><select id="newGroupTier"><option value="normal">ปกติ</option><option value="head">งานหัว</option></select></div><button class="btn btn-ghost" id="createGroup">＋ เพิ่มกลุ่ม</button></div>
       <div id="groupList" class="group-list"></div>
-      <div class="field"><label>กลุ่มสำหรับ Import</label><select id="importGroupSelect"></select></div><div class="excel-tools"><button class="btn btn-ghost btn-sm" id="downloadTemplate">📊 ดาวน์โหลด Excel Template</button><label class="btn btn-ghost btn-sm file-btn">Import Excel <input id="excelInput" type="file" accept=".xlsx,.xls,.csv" hidden></label><label class="btn btn-ghost btn-sm file-btn">รูปตาม Excel <input id="excelImages" type="file" accept="image/*" multiple hidden></label><button class="btn btn-primary btn-sm" id="importExcelBtn">นำเข้า</button></div><div class="callout">💡 Excel ใช้คอลัมน์ <b>item_name, size, condition, tier, price, photo_count</b> โดย photo_count = 1 หรือ 2 แล้วเลือกไฟล์รูปทั้งหมดตามลำดับ IMG_... ของ iPhone ระบบจะจับรูปตาม photo_count ให้เอง</div>
-      <div class="callout">💡 แนะนำ: แกะกระสอบ → คัดเป็นกอง → สร้างกลุ่มตามราคาของ Lot นั้น → ลงข้อมูลเองทีละตัว หรือ Import Excel ทั้งกองก็ได้</div>
+      <div class="callout">⚡ <b>กระสอบใหญ่ (หลักร้อยชิ้น):</b> กด "ถ่ายรูปแล้วลงทั้งกอง" → เลือกรูปทั้งหมดของกองรวดเดียว (iPhone จับให้เอง ไม่ต้อง rename) → ได้ตารางแบบ Excel มาพิมพ์ชื่อ/ไซซ์/ราคาต่อกันรัวๆ (Enter = แถวถัดไป, วางจาก Excel/Google Sheets ได้เลย) → กดบันทึกครั้งเดียวจบทั้งกอง</div>
+      <div class="callout">🐢 <b>ของทีละ 2–3 ชิ้น:</b> ใช้ "ลงทีละชิ้น" ถ่ายรูป+กรอกทีละตัวได้เหมือนเดิม เหมาะกับตอนรับของมาไม่กี่ตัว</div>
+      <div class="field"><label>กลุ่มสำหรับ Import</label><select id="importGroupSelect"></select></div><div class="excel-tools"><button class="btn btn-ghost btn-sm" id="downloadTemplate">📊 ดาวน์โหลด Excel Template</button><label class="btn btn-ghost btn-sm file-btn">Import Excel <input id="excelInput" type="file" accept=".xlsx,.xls,.csv" hidden></label><label class="btn btn-ghost btn-sm file-btn">รูปตาม Excel <input id="excelImages" type="file" accept="image/*" multiple hidden></label><button class="btn btn-primary btn-sm" id="importExcelBtn">นำเข้า</button></div><div class="callout">💡 Excel ใช้คอลัมน์ <b>item_name, size, condition, tier, price, photo_count</b> โดย photo_count = 1 หรือ 2 แล้วเลือกไฟล์รูปทั้งหมดตามลำดับ IMG_... ของ iPhone ระบบจะจับรูปตาม photo_count ให้เอง มี Excel รายชื่ออยู่แล้ว? ข้ามการถ่ายรูปทีละใบ ใช้ปุ่ม Import นี้แทนได้เลย</div>
     </div>
     <div id="bulkStep2" class="hidden">
       <!-- Bulk Table: จุดตรวจสอบกลางก่อนเขียน Items ลง Supabase -->

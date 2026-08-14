@@ -2,11 +2,34 @@
    SELL (sell.html) — หน้าขายของ / ตัดสต็อก
    ========================================================== */
 
+.sell-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.sell-tab {
+  border: 1px solid var(--color-line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font: 600 13px var(--font-body);
+  cursor: pointer;
+  color: var(--color-ink-soft);
+}
+.sell-tab.active {
+  background: var(--color-tan);
+  border-color: var(--color-tan);
+  color: #fff;
+}
+
 .item-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 10px;
 }
+.item-tile.tile-sold { cursor: pointer; }
+.item-tile.tile-sold .price { color: var(--color-ink-soft); }
+.item-tile-sold-date { font-size: 11px; color: var(--color-ink-soft); margin-top: 2px; }
 .item-tile {
   background: var(--color-surface);
   border: 1px solid var(--color-line);

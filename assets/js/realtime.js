@@ -1,12 +1,20 @@
 /* ==========================================================
    realtime.js — ชั้นกลางสำหรับ Sync ทุกอุปกรณ์
-   Flow: Supabase Realtime → event ของ table → reload function ของหน้าปัจจุบัน
-   ใช้กับมือถือ 1, มือถือ 2, iPad และ Computer ได้เหมือนกัน
-   ไม่มีการแบ่ง Permission; ทุกอุปกรณ์ใช้ฐานข้อมูลเดียวกัน
+   Flow: Supabase Realtime → vims:realtime → หน้า UI ที่เปิดอยู่
+
+   IMPORTANT:
+   - ใช้ channel เดียวต่อ browser tab เพื่อลดการ subscribe ซ้ำ
+   - ทุกหน้ารับ event ผ่าน CustomEvent ชื่อ vims:realtime
+   - มี refresh สำรองเมื่อกลับมาที่หน้า / tab / online
+   - ไม่มี Permission แยก device; ทุกอุปกรณ์ใช้ DB เดียวกัน
    ========================================================== */
 
 (function () {
-  // แสดงสถานะออนไลน์/Realtime ให้ผู้ใช้รู้ทันทีว่าเครื่องกำลังเชื่อมกับฐานข้อมูลหรือไม่
+  const TABLES = ['lots', 'lot_groups', 'items', 'item_images', 'sales', 'expenses'];
+  let channel = null;
+  let subscribed = false;
+  let reloadTimer = null;
+
   function ensureSyncIndicator() {
     if (document.getElementById('syncIndicator')) return;
     const el = document.createElement('div');
@@ -16,8 +24,8 @@
     document.body.appendChild(el);
   }
 
-  // เปลี่ยนข้อความสถานะของ Sync และเก็บเวลาที่ Sync สำเร็จล่าสุดไว้ให้ดูได้
   function setSyncStatus(state, text) {
+    ensureSyncIndicator();
     const el = document.getElementById('syncIndicator');
     if (!el) return;
     el.className = `sync-indicator sync-${state}`;
@@ -25,60 +33,92 @@
     if (textEl) textEl.textContent = text;
   }
 
-  // เมื่อออนไลน์/ออฟไลน์เปลี่ยน จะอัปเดต UI ทันทีและไม่หลอกผู้ใช้ว่าข้อมูลถูกส่งแล้ว
-  function updateNetworkState() {
-    if (navigator.onLine) setSyncStatus('online', 'ออนไลน์ · Sync พร้อม');
-    else setSyncStatus('offline', 'ออฟไลน์ · ยังไม่ Sync');
+  function emitChange(table, payload = null, source = 'realtime') {
+    window.dispatchEvent(new CustomEvent('vims:realtime', {
+      detail: { table, payload, source, at: Date.now() }
+    }));
   }
 
-  // เรียก reload ของหน้าปัจจุบันแบบ debounce เพื่อไม่ให้ Realtime หลาย event ยิง query ซ้อนกัน
-  function scheduleReload(reloadFn) {
-    clearTimeout(window.__vimsRealtimeReloadTimer);
-    window.__vimsRealtimeReloadTimer = setTimeout(() => {
-      if (typeof reloadFn !== 'function' || !navigator.onLine) return;
-      reloadFn();
-      setSyncStatus('online', `Sync ล่าสุด ${new Date().toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'})}`);
-    }, 250);
-  }
+  // Realtime event จาก Supabase จะเรียก listener ของหน้าปัจจุบัน เช่น sell.js / reports.js / accounting.js
+  function subscribeRealtime() {
+    if (subscribed || !window.supabaseClient) return;
 
-  // ผูก table กับ callback ที่ต้อง refresh เมื่อข้อมูลใน Supabase เปลี่ยนจากอุปกรณ์ใดก็ตาม
-  function subscribeTable(table, reloadFn) {
-    return supabaseClient
-      .channel(`vims2:${table}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table }, () => scheduleReload(reloadFn))
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') setSyncStatus('online', 'ออนไลน์ · Realtime พร้อม');
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setSyncStatus('offline', 'Realtime ขัดข้อง · ตรวจอินเทอร์เน็ต');
-      });
-  }
+    channel = window.supabaseClient.channel('vims2-lite-realtime');
 
-  // เลือกเฉพาะ table ที่เกี่ยวข้องกับหน้า เพื่อลดจำนวน realtime event ที่แต่ละเครื่องต้องรับ
-  function startPageSubscriptions() {
-    const page = location.pathname.split('/').pop() || 'index.html';
-    const reload = (name) => typeof window[name] === 'function' ? window[name] : null;
-    const subscriptions = {
-      'index.html': [['items', () => { dashboardRows = null; loadDashboard(rangeFromPreset(activeRange)); }], ['sales', () => { dashboardRows = null; loadDashboard(rangeFromPreset(activeRange)); }], ['expenses', () => { dashboardRows = null; loadDashboard(rangeFromPreset(activeRange)); }], ['lots', () => { dashboardRows = null; loadDashboard(rangeFromPreset(activeRange)); }]],
-      'lots.html': [['lots', reload('loadLots')], ['lot_groups', reload('loadLots')], ['items', reload('loadLots')], ['sales', reload('loadLots')]],
-      'items.html': [['lots', reload('loadLots')], ['lot_groups', reload('loadLots')], ['items', reload('loadItems')], ['item_images', reload('loadItems')], ['item_change_history', reload('loadItems')]],
-      'sell.html': [['items', reload('loadSellGrid')], ['item_images', reload('loadSellGrid')], ['sales', reload('loadSellGrid')]],
-      'reports.html': [['sales', reload('loadReport')], ['expenses', reload('loadReport')], ['items', reload('loadReport')], ['lots', reload('loadReport')]],
-      'accounting.html': [['lots', reload('loadAll')], ['sales', reload('loadAll')], ['expenses', reload('loadAll')], ['app_settings', reload('loadAll')]],
-    };
+    TABLES.forEach((table) => {
+      channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table },
+        (payload) => {
+          setSyncStatus('syncing', 'กำลัง Sync…');
+          emitChange(table, payload, 'realtime');
+          window.setTimeout(() => setSyncStatus('online', 'Realtime พร้อม'), 500);
+        }
+      );
+    });
 
-    (subscriptions[page] || []).forEach(([table, fn]) => {
-      if (fn) subscribeTable(table, fn);
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        subscribed = true;
+        setSyncStatus('online', 'Realtime พร้อม');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        subscribed = false;
+        if (channel && window.supabaseClient) {
+          window.supabaseClient.removeChannel(channel);
+          channel = null;
+        }
+        setSyncStatus('offline', 'Realtime ขัดข้อง · กำลังลองใหม่');
+        window.setTimeout(() => {
+          if (!subscribed) subscribeRealtime();
+        }, 3000);
+      } else if (status === 'CLOSED') {
+        subscribed = false;
+        channel = null;
+        setSyncStatus('offline', 'Realtime ถูกตัด · กำลังเชื่อมใหม่');
+        window.setTimeout(() => {
+          if (!subscribed) subscribeRealtime();
+        }, 1500);
+      }
     });
   }
 
-  // เริ่มระบบ Sync หลัง DOM พร้อม เพื่อให้ indicator ถูกสร้างก่อน subscribe
+  // Refresh สำรองเมื่อผู้ใช้กลับมาที่ tab/page เพื่อป้องกันกรณี browser หยุด WebSocket ตอนอยู่เบื้องหลัง
+  function requestPageRefresh(source) {
+    clearTimeout(reloadTimer);
+    reloadTimer = window.setTimeout(() => {
+      emitChange('page_refresh', null, source);
+      setSyncStatus('syncing', 'กำลังตรวจข้อมูลล่าสุด…');
+      window.setTimeout(() => setSyncStatus('online', 'ตรวจข้อมูลล่าสุดแล้ว'), 400);
+    }, 150);
+  }
+
+  function updateNetworkState() {
+    if (navigator.onLine) {
+      setSyncStatus('online', subscribed ? 'ออนไลน์ · Realtime พร้อม' : 'ออนไลน์ · กำลังเชื่อม…');
+      subscribeRealtime();
+      requestPageRefresh('network_online');
+    } else {
+      setSyncStatus('offline', 'ออฟไลน์ · ยังไม่ Sync');
+    }
+  }
+
   function initRealtimeSync() {
     ensureSyncIndicator();
     updateNetworkState();
+
     window.addEventListener('online', updateNetworkState);
     window.addEventListener('offline', updateNetworkState);
-    startPageSubscriptions();
+
+    // เมื่อสลับกลับมาหน้านี้ ให้หน้าต่าง ๆ โหลดข้อมูลล่าสุดอีกครั้ง
+    window.addEventListener('focus', () => requestPageRefresh('window_focus'));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') requestPageRefresh('visibility');
+    });
+    window.addEventListener('pageshow', () => requestPageRefresh('pageshow'));
+
+    subscribeRealtime();
   }
 
-  window.VIMSRealtime = { initRealtimeSync, setSyncStatus };
+  window.VIMSRealtime = { initRealtimeSync, setSyncStatus, emitChange };
   initRealtimeSync();
 })();

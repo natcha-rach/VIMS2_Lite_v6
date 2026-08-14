@@ -98,7 +98,7 @@ function maybeOfferBulkDraft() {
 // Realtime ของหน้า Items: reload เมื่ออีก Device เพิ่ม/แก้/ขาย Item หรือเปลี่ยน Group
 window.addEventListener('vims:realtime', (event) => {
   const table = event.detail?.table;
-  if (['items', 'item_images', 'lots', 'lot_groups'].includes(table)) {
+  if (table === 'page_refresh' || ['items', 'item_images', 'lots', 'lot_groups'].includes(table)) {
     loadLots();
     loadItems();
   }
@@ -146,6 +146,7 @@ async function loadLots(preferredLotId = null) {
 
   const selectedLotId = $('lotSelect')?.value || currentLotId || '';
   await loadGroups(selectedLotId);
+  if (selectedLotId) await applyLotCostDefault(selectedLotId);
   updateQuickStats();
 
   if (!bulkDraftPrompted) {
@@ -170,13 +171,18 @@ function renderGroupOptions() {
 function renderGroups() {
   const el = $('groupList'); if (!el) return;
   if (!allGroups.length) { el.innerHTML = '<div class="empty-state">Lot นี้ยังไม่มีกลุ่ม กดเพิ่มกลุ่มด้านบนได้เลย</div>'; return; }
-  el.innerHTML = allGroups.map(g => `<div class="group-row"><div><b>${escapeHtml(g.group_name)}</b><span>${g.tier==='head'?'งานหัว':'ปกติ'} · ราคาเริ่ม ${formatBaht(g.base_price)}</span></div><div class="group-actions"><button class="btn btn-ghost btn-sm" data-photo-group="${g.id}">📷 รูปก่อน</button><button class="btn btn-primary btn-sm" data-start-group="${g.id}">เริ่มลงกอง</button></div></div>`).join('');
+  el.innerHTML = allGroups.map(g => `<div class="group-row"><div><b>${escapeHtml(g.group_name)}</b><span>${g.tier==='head'?'งานหัว':'ปกติ'} · ราคาเริ่ม ${formatBaht(g.base_price)}</span></div><div class="group-actions"><button class="btn btn-primary btn-sm" data-photo-group="${g.id}">⚡ ถ่ายรูปแล้วลงทั้งกอง</button><button class="btn btn-ghost btn-sm" data-start-group="${g.id}">ลงทีละชิ้น</button></div></div>`).join('');
   el.querySelectorAll('[data-start-group]').forEach(btn => btn.onclick = () => startGroup(btn.dataset.startGroup));
   // ปุ่มนี้เปิด Photo Queue เพื่อจัดรูปก่อนกรอกรายละเอียดสินค้า
   el.querySelectorAll('[data-photo-group]').forEach(btn => btn.onclick = () => openPhotoQueue(btn.dataset.photoGroup));
 }
 
-$('lotSelect')?.addEventListener('change', () => loadGroups($('lotSelect').value));
+// ต้นทุน/ชิ้นของฟอร์มเพิ่มสินค้า 1 ตัว: ดึงจากต้นทุนเฉลี่ยของ Lot ให้อัตโนมัติ (แก้ไขเองได้ถ้าจำเป็น)
+async function applyLotCostDefault(lotId) {
+  if (!$('costPrice') || !lotId) return;
+  $('costPrice').value = await getLotAvgCost(lotId);
+}
+$('lotSelect')?.addEventListener('change', () => { loadGroups($('lotSelect').value); applyLotCostDefault($('lotSelect').value); });
 $('bulkLot')?.addEventListener('change', () => { loadGroups($('bulkLot').value); });
 $('createGroup')?.addEventListener('click', async () => {
   const lotId = $('bulkLot').value;
@@ -314,14 +320,21 @@ $('quickEntryForm')?.addEventListener('submit', async e=>{
 $('focusSingle')?.addEventListener('click',()=>{ $('itemName').focus(); window.scrollTo({top:0,behavior:'smooth'}); });
 $('filterStatus')?.addEventListener('change',loadItems); $('searchBox')?.addEventListener('input',loadItems);
 async function loadItems(){
-  const status=$('filterStatus').value,q=($('searchBox').value||'').trim(); let query=supabaseClient.from('items').select('*, lots(lot_name), lot_groups(group_name)').order('created_at',{ascending:false}); if(status!=='all') query=query.eq('status',status); if(q) query=query.ilike('item_name',`%${q}%`);
-  const {data,error}=await query; if(error){$('itemList').innerHTML='<div class="empty-state">โหลดข้อมูลไม่สำเร็จ</div>';return;} itemsCache=data||[]; renderItems(); updateQuickStats();
+  const status=$('filterStatus').value,q=($('searchBox').value||'').trim();
+  // fetchAllRows กันรายการสินค้าตกหล่นแบบเงียบๆ เมื่อเกิน 1000 แถว (default row limit ของ Supabase)
+  const {data,error}=await fetchAllRows(()=>{
+    let query=supabaseClient.from('items').select('*, lots(lot_name), lot_groups(group_name)').order('created_at',{ascending:false});
+    if(status!=='all') query=query.eq('status',status);
+    if(q) query=query.ilike('item_name',`%${q}%`);
+    return query;
+  });
+  if(error){$('itemList').innerHTML='<div class="empty-state">โหลดข้อมูลไม่สำเร็จ</div>';return;} itemsCache=data||[]; renderItems(); updateQuickStats();
 }
 async function renderItems(){
   // โหลดรูปทั้งหมดของรายการที่กำลังแสดง เพื่อให้ card รู้ว่ามีรูป 1 หรือ 2 รูป
   if(!itemsCache.length){$('itemList').innerHTML='<div class="empty-state">ไม่มีสินค้าในรายการนี้</div>';return;}
   const ids=itemsCache.map(i=>i.id);
-  const {data:imgs}=await supabaseClient.from('item_images').select('*').in('item_id',ids).order('sort_order');
+  const {data:imgs}=await fetchAllRows(()=>supabaseClient.from('item_images').select('*').in('item_id',ids).order('sort_order'));
   const byItem={}; (imgs||[]).forEach(x=>(byItem[x.item_id]??=[]).push(x));
   // สร้าง Stock Card; ปุ่มแก้ไขจะส่ง Item ID กลับเข้า editItem() ซึ่งเป็นจุดเชื่อมกับ Edit Modal
   $('itemList').innerHTML=itemsCache.map(i=>{
@@ -336,7 +349,7 @@ async function renderItems(){
   }).join('');
   $('itemList').querySelectorAll('[data-edit-item]').forEach(btn=>btn.onclick=()=>openEditItem(btn.dataset.editItem));
 }
-async function updateQuickStats(){ const {data,error}=await supabaseClient.from('items').select('status,cost_price'); if(error)return; const rows=data||[]; const available=rows.filter(x=>x.status==='available'); const sold=rows.filter(x=>x.status==='sold'); const value=available.reduce((s,x)=>s+Number(x.cost_price||0),0); $('quickStats').innerHTML=`<div><span>สินค้าทั้งหมด</span><b>${rows.length}</b></div><div><span>พร้อมขาย</span><b>${available.length}</b></div><div><span>ขายแล้ว</span><b>${sold.length}</b></div><div><span>ต้นทุนคงเหลือ</span><b>${formatBaht(value)}</b></div>`; }
+async function updateQuickStats(){ const {data,error}=await fetchAllRows(()=>supabaseClient.from('items').select('status,cost_price')); if(error)return; const rows=data||[]; const available=rows.filter(x=>x.status==='available'); const sold=rows.filter(x=>x.status==='sold'); const value=available.reduce((s,x)=>s+Number(x.cost_price||0),0); $('quickStats').innerHTML=`<div><span>สินค้าทั้งหมด</span><b>${rows.length}</b></div><div><span>พร้อมขาย</span><b>${available.length}</b></div><div><span>ขายแล้ว</span><b>${sold.length}</b></div><div><span>ต้นทุนคงเหลือ</span><b>${formatBaht(value)}</b></div>`; }
 function escapeHtml(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function showToast(msg){const t=$('toast');if(!t)return;t.textContent=msg;t.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>t.classList.remove('show'),2600);}
 loadLots(new URLSearchParams(window.location.search).get('lot')); loadItems();

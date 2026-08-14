@@ -112,7 +112,26 @@ a { color: var(--color-denim); }
   outline-offset: 1px;
 }
 .field-row { display: flex; gap: 10px; }
-.field-row .field { flex: 1; }
+.field-row .field { flex: 1; min-width: 0; }
+
+/* V10.1.1 — Mobile date input: ป้องกัน native date control บน iPhone/Android ล้นช่องหรือดัน field ข้างเคียง */
+.field input[type="date"] {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+
+@media (max-width: 767px) {
+  .field input[type="date"] {
+    width: 100%;
+    min-height: 44px;
+    padding-left: 10px;
+    padding-right: 6px;
+    font-size: 16px;
+  }
+}
 
 .btn {
   display: inline-block;

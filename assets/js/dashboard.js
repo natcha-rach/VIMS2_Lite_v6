@@ -28,12 +28,14 @@ function sum(arr, fn) { return arr.reduce((a,x) => a + Number(fn(x) || 0), 0); }
 function percent(a,b) { return b ? (a/b)*100 : 0; }
 
 async function fetchDashboardData() {
+  // fetchAllRows แทนการเรียก supabaseClient.from(...) ตรงๆ เพราะ PostgREST คืนสูงสุด 1000 แถว/ครั้ง
+  // ถ้าไม่ paginate ยอด Dashboard จะตกหล่นแบบเงียบๆ เมื่อ items/sales เกิน 1000 แถว
   const [lotsR, groupsR, itemsR, salesR, expensesR] = await Promise.all([
-    supabaseClient.from("lots").select("id,lot_name,purchase_date,total_cost,total_items"),
-    supabaseClient.from("lot_groups").select("id,lot_id,group_name,base_price,tier"),
-    supabaseClient.from("items").select("id,lot_id,item_name,size,condition,tier,cost_price,current_price,status,created_at,sold_at,group_id"),
-    supabaseClient.from("sales").select("id,item_id,sale_date,channel,sale_price,cost_price,payment_method"),
-    supabaseClient.from("expenses").select("id,expense_date,amount,category")
+    fetchAllRows(() => supabaseClient.from("lots").select("id,lot_name,purchase_date,total_cost,total_items")),
+    fetchAllRows(() => supabaseClient.from("lot_groups").select("id,lot_id,group_name,base_price,tier")),
+    fetchAllRows(() => supabaseClient.from("items").select("id,lot_id,item_name,size,condition,tier,cost_price,current_price,status,created_at,sold_at,group_id")),
+    fetchAllRows(() => supabaseClient.from("sales").select("id,item_id,sale_date,channel,sale_price,cost_price,payment_method")),
+    fetchAllRows(() => supabaseClient.from("expenses").select("id,expense_date,amount,category"))
   ]);
   const err = lotsR.error || groupsR.error || itemsR.error || salesR.error || expensesR.error;
   if (err) throw err;
@@ -140,7 +142,7 @@ function showToast(m){const t=$("toast");if(!t)return;t.textContent=m;t.classLis
 // Realtime: Dashboard ต้องดึงข้อมูลใหม่เมื่อ Lot / Item / Sale / Expense เปลี่ยนจาก Device อื่น
 window.addEventListener('vims:realtime', (event) => {
   const table = event.detail?.table;
-  if (['lots', 'lot_groups', 'items', 'sales', 'expenses'].includes(table)) {
+  if (table === 'page_refresh' || ['lots', 'lot_groups', 'items', 'sales', 'expenses'].includes(table)) {
     dashboardRows = null;
     loadDashboard(rangeFromPreset(activeRange));
   }

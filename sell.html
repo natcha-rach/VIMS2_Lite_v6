@@ -56,11 +56,23 @@
       </div>
 
       <div class="page">
+        <div class="sell-tabs" id="sellTabs">
+          <button type="button" class="sell-tab active" data-tab="available">พร้อมขาย</button>
+          <button type="button" class="sell-tab" data-tab="sold">ขายแล้ว</button>
+        </div>
         <div class="field" style="margin-bottom: 16px">
           <input type="text" id="searchBox" placeholder="ค้นหาชื่อเสื้อ..." />
         </div>
-        <div class="sell-hint">💡 คลิกสินค้าเพื่อดูรูป ต้นทุน Lot ราคา และประวัติการขายก่อนยืนยัน</div>
+        <div class="sell-hint" id="sellHintAvailable">
+          💡 คลิกสินค้าเพื่อดูรูป ต้นทุน Lot ราคา และประวัติการขายก่อนยืนยัน
+        </div>
+        <div class="sell-hint hidden" id="sellHintSold">
+          💡 แสดงรายการที่ขายล่าสุด 300 รายการ — ดูรายงานย้อนหลังทั้งหมดได้ที่หน้า "รายงาน"
+        </div>
         <div class="item-grid" id="sellGrid">
+          <div class="empty-state">กำลังโหลด...</div>
+        </div>
+        <div class="item-grid hidden" id="soldGrid">
           <div class="empty-state">กำลังโหลด...</div>
         </div>
       </div>
@@ -123,12 +135,18 @@
       <div class="modal-backdrop hidden" id="saleDetailModal">
         <div class="modal-sheet sale-detail-sheet">
           <div class="modal-head">
-            <div><h2 id="detailName">-</h2><p id="detailMeta"></p></div>
+            <div>
+              <h2 id="detailName">-</h2>
+              <p id="detailMeta"></p>
+            </div>
             <button class="icon-btn" id="closeSaleDetail">×</button>
           </div>
 
           <!-- รูป 1–2 รูปมาจาก item_images และไม่เกี่ยวกับการคำนวณราคา -->
-          <div class="detail-images"><div id="detailImage1" class="detail-image">👕</div><div id="detailImage2" class="detail-image">＋</div></div>
+          <div class="detail-images">
+            <div id="detailImage1" class="detail-image">👕</div>
+            <div id="detailImage2" class="detail-image">＋</div>
+          </div>
 
           <div class="detail-grid">
             <div><span>Lot</span><b id="detailLot">-</b></div>
@@ -140,12 +158,28 @@
 
           <section class="sale-history-section">
             <div class="section-title"><h3>ประวัติการขาย</h3></div>
-            <div id="saleHistory"><div class="empty-state small">กำลังโหลด...</div></div>
+            <div id="saleHistory">
+              <div class="empty-state small">กำลังโหลด...</div>
+            </div>
           </section>
 
           <div class="field-row">
-            <button type="button" class="btn btn-ghost" id="cancelDetailSale" style="flex:1">ปิด</button>
-            <button type="button" class="btn btn-primary" id="openSellConfirm" style="flex:2">💰 ขายสินค้านี้</button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              id="cancelDetailSale"
+              style="flex: 1"
+            >
+              ปิด
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="openSellConfirm"
+              style="flex: 2"
+            >
+              💰 ขายสินค้านี้
+            </button>
           </div>
         </div>
       </div>
@@ -156,6 +190,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="assets/js/supabaseClient.js"></script>
     <script src="assets/js/nav.js"></script>
-    <script src="assets/js/sell.js"></script><script src="assets/js/realtime.js"></script>
+    <script src="assets/js/sell.js"></script>
+    <script src="assets/js/realtime.js"></script>
   </body>
 </html>

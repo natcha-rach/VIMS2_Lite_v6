@@ -84,10 +84,11 @@ async function loadLots() {
     return;
   }
   const lotIds = lotsCache.map(l => l.id);
+  // fetchAllRows กัน items/sales ตกหล่นเมื่อเกิน 1000 แถว (default row limit ของ Supabase)
   const [groupsR, itemsR, salesR] = await Promise.all([
-    supabaseClient.from("lot_groups").select("*").in("lot_id", lotIds).order("sort_order").order("created_at"),
-    supabaseClient.from("items").select("id,lot_id,status,cost_price,current_price" ).in("lot_id", lotIds),
-    supabaseClient.from("sales").select("item_id,sale_price,cost_price,sale_date").order("sale_date", { ascending: false })
+    fetchAllRows(() => supabaseClient.from("lot_groups").select("*").in("lot_id", lotIds).order("sort_order").order("created_at")),
+    fetchAllRows(() => supabaseClient.from("items").select("id,lot_id,status,cost_price,current_price").in("lot_id", lotIds)),
+    fetchAllRows(() => supabaseClient.from("sales").select("item_id,sale_price,cost_price,sale_date").order("sale_date", { ascending: false }))
   ]);
   if (groupsR.error || itemsR.error || salesR.error) console.warn(groupsR.error || itemsR.error || salesR.error);
   const groupsByLot = {};
@@ -174,20 +175,24 @@ async function loadGroupsForLot() {
 }
 
 function resetGroupForm() {
-  $("groupId").value = ""; $("groupName").value = ""; $("groupBasePrice").value = ""; $("groupTier").value = "normal"; $("groupSortOrder").value = activeGroups.length || 0;
+  $("groupId").value = ""; $("groupName").value = ""; $("groupBasePrice").value = ""; $("groupTier").value = "normal";
   $("groupSubmitBtn").textContent = "เพิ่มกลุ่ม"; $("cancelGroupEdit").classList.add("hidden");
 }
 function editGroup(id) {
   const g = activeGroups.find(x => x.id === id); if (!g) return;
-  $("groupId").value = g.id; $("groupName").value = g.group_name; $("groupBasePrice").value = g.base_price; $("groupTier").value = g.tier; $("groupSortOrder").value = g.sort_order || 0;
+  $("groupId").value = g.id; $("groupName").value = g.group_name; $("groupBasePrice").value = g.base_price; $("groupTier").value = g.tier;
   $("groupSubmitBtn").textContent = "บันทึกกลุ่ม"; $("cancelGroupEdit").classList.remove("hidden"); $("groupName").focus();
 }
 $("cancelGroupEdit").addEventListener("click", resetGroupForm);
 $("groupForm").addEventListener("submit", async e => {
   e.preventDefault();
-  const payload = { lot_id: activeLotId, group_name: $("groupName").value.trim(), base_price: Number($("groupBasePrice").value || 0), tier: $("groupTier").value, sort_order: Number($("groupSortOrder").value || 0) };
-  if (!payload.group_name) return showToast("กรุณาใส่ชื่อกลุ่ม");
   const id = $("groupId").value;
+  // ไม่ให้ผู้ใช้กรอกลำดับเอง: กลุ่มใหม่ต่อท้ายอัตโนมัติ, กลุ่มที่แก้ไขคงลำดับเดิมไว้
+  const existing = id ? activeGroups.find(x => x.id === id) : null;
+  const nextOrder = activeGroups.length ? Math.max(...activeGroups.map(g => Number(g.sort_order) || 0)) + 1 : 0;
+  const sortOrder = existing ? Number(existing.sort_order) || 0 : nextOrder;
+  const payload = { lot_id: activeLotId, group_name: $("groupName").value.trim(), base_price: Number($("groupBasePrice").value || 0), tier: $("groupTier").value, sort_order: sortOrder };
+  if (!payload.group_name) return showToast("กรุณาใส่ชื่อกลุ่ม");
   const { error } = id ? await supabaseClient.from("lot_groups").update(payload).eq("id", id) : await supabaseClient.from("lot_groups").insert(payload);
   if (error) return showToast("บันทึกกลุ่มไม่สำเร็จ: " + error.message);
   showToast(id ? "แก้ไขกลุ่มแล้ว" : "เพิ่มกลุ่มแล้ว");
@@ -211,5 +216,5 @@ loadLots();
 // Realtime: Lot/Group ที่เพิ่มจากอีก Device จะปรากฏในหน้าปัจจุบันโดยไม่ต้อง Refresh
 window.addEventListener('vims:realtime', (event) => {
   const table = event.detail?.table;
-  if (['lots', 'lot_groups'].includes(table)) loadLots();
+  if (table === 'page_refresh' || ['lots', 'lot_groups'].includes(table)) loadLots();
 });
