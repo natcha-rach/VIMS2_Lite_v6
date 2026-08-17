@@ -48,18 +48,20 @@
 .modal-backdrop {
   position: fixed; inset: 0;
   background: rgba(43,38,32,0.5);
-  display: flex; align-items: flex-end; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
   z-index: 50;
 }
 .modal-backdrop.hidden { display: none; }
 .modal-sheet {
   background: var(--color-surface);
-  width: 100%;
-  max-width: 480px;
-  border-radius: 16px 16px 0 0;
+  width: min(100%, 480px);
+  border-radius: 16px;
   padding: 20px;
-  max-height: 85vh;
+  max-height: min(85vh, 760px);
   overflow-y: auto;
+  box-sizing: border-box;
+  box-shadow: 0 18px 50px rgba(43,38,32,0.22);
 }
 
 /* ==========================================================
@@ -104,6 +106,34 @@
 .sale-history-row .loss { color: #b33a3a; }
 .empty-state.small { padding: 12px; font-size: 12px; }
 @media (max-width: 520px) {
+  .modal-backdrop { padding: 16px; }
+  .modal-sheet {
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 16px;
+    padding: 18px;
+  }
   .detail-grid { grid-template-columns: 1fr 1fr; }
   .sale-history-row { grid-template-columns: 1fr; gap: 5px; }
+}
+
+
+/* V10.1.1 — การ์ดสินค้าแยกปุ่มดูรายละเอียดกับปุ่มขายให้กดง่ายบนมือถือ */
+.item-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.item-tile-main {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.item-tile-sell {
+  width: 100%;
+  min-height: 42px;
 }

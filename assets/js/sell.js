@@ -144,17 +144,30 @@ function renderGrid(items) {
   const html = items.map((item) => {
     const image = itemImagesById[item.id]?.[0];
     return `
-      <button class="item-tile" data-id="${item.id}">
-        <div class="item-tile-image">${image ? `<img src="${image.image_url}" alt="">` : "👕"}</div>
-        <div class="name">${escapeHtml(item.item_name)}</div>
-        <div class="meta">${escapeHtml(item.size || "-")} · ${item.condition || "-"} · ${item.tier === "head" ? "งานหัว" : "ปกติ"}</div>
-        <div class="price">${formatBaht(item.current_price ?? item.sell_price)}</div>
-      </button>`;
+      <div class="item-tile" data-id="${item.id}">
+        <button type="button" class="item-tile-main" data-action="detail" data-id="${item.id}" aria-label="ดูรายละเอียด ${escapeHtml(item.item_name)}">
+          <div class="item-tile-image">${image ? `<img src="${image.image_url}" alt="">` : "👕"}</div>
+          <div class="name">${escapeHtml(item.item_name)}</div>
+          <div class="meta">${escapeHtml(item.size || "-")} · ${item.condition || "-"} · ${item.tier === "head" ? "งานหัว" : "ปกติ"}</div>
+          <div class="price">${formatBaht(item.current_price ?? item.sell_price)}</div>
+        </button>
+        <button type="button" class="btn btn-primary item-tile-sell" data-action="sell" data-id="${item.id}">💰 ขาย</button>
+      </div>`;
   }).join("");
 
   document.getElementById("sellGrid").innerHTML = html;
-  document.querySelectorAll("#sellGrid .item-tile").forEach((tile) => {
-    tile.addEventListener("click", () => openItemSaleDetail(tile.dataset.id, "available"));
+  // ใช้ event delegation เพื่อให้ปุ่มขายทำงานแน่นอนแม้ grid จะถูก render ใหม่จาก Realtime
+  document.querySelectorAll("#sellGrid [data-action]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const itemId = button.dataset.id;
+      if (button.dataset.action === "sell") {
+        openItemSaleDetail(itemId, "available").then(() => openSellConfirm());
+      } else {
+        openItemSaleDetail(itemId, "available");
+      }
+    });
   });
 }
 
@@ -243,7 +256,11 @@ function closeModal(id) {
 document.getElementById("closeSaleDetail").addEventListener("click", () => closeModal("saleDetailModal"));
 document.getElementById("cancelDetailSale").addEventListener("click", () => closeModal("saleDetailModal"));
 document.getElementById("cancelSell").addEventListener("click", () => closeModal("sellModal"));
-document.getElementById("openSellConfirm").addEventListener("click", () => {
+// ปุ่ม "ขายสินค้านี้" อยู่ใน Modal รายละเอียด — ใช้ event delegation เพื่อป้องกันปัญหา listener หลุดหลัง UI ถูก render/อัปเดต
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("#openSellConfirm");
+  if (!button) return;
+  event.preventDefault();
   closeModal("saleDetailModal");
   openSellConfirm();
 });
